@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useCallback, useEffect } from "react";
 import Image from "next/image";
-import { Upload, X, Star, GripVertical, ImageIcon, Loader2, AlertCircle, Link as LinkIcon } from "lucide-react";
+import { Upload, X, Star, GripVertical, ImageIcon, Loader2, AlertCircle, Link as LinkIcon, RotateCw } from "lucide-react";
 import { toYoutubeEmbedUrl } from "@/lib/formatters";
 import { extractDroppedImageUrl } from "@/lib/drag-image-url";
 import type { ProductMedia } from "@/types";
@@ -174,24 +174,40 @@ export function MediaUploader({
   // Upload de arquivo
   // ---------------------------------------------------------------------------
 
-  const uploadFile = async (file: File) => {
-    const localId = `local-${Date.now()}-${Math.random()}`;
+  // Mantém o File original de cada item em upload/com erro — permite "Tentar
+  // novamente" sem o usuário precisar apagar e arrastar o arquivo de novo
+  // depois de uma falha de rede no meio do envio.
+  const fileMapRef = useRef<Map<string, File>>(new Map());
 
-    // Adiciona item como "uploading"
-    const pending: UploadedMedia = {
-      localId,
-      url: URL.createObjectURL(file),
-      type: "image",
-      is_main: false,
-      display_order: 0,
-      uploading: true,
-    };
+  const uploadFile = async (file: File, retryLocalId?: string) => {
+    const localId = retryLocalId ?? `local-${Date.now()}-${Math.random()}`;
+    fileMapRef.current.set(localId, file);
 
-    setItems((prev) => {
-      const next = [...prev, pending];
-      notify(next, removedDbIds, videoUrl);
-      return next;
-    });
+    if (retryLocalId) {
+      setItems((prev) => {
+        const next = prev.map((it) =>
+          it.localId === localId ? { ...it, uploading: true, uploadError: undefined } : it
+        );
+        notify(next, removedDbIds, videoUrl);
+        return next;
+      });
+    } else {
+      // Adiciona item como "uploading"
+      const pending: UploadedMedia = {
+        localId,
+        url: URL.createObjectURL(file),
+        type: "image",
+        is_main: false,
+        display_order: 0,
+        uploading: true,
+      };
+
+      setItems((prev) => {
+        const next = [...prev, pending];
+        notify(next, removedDbIds, videoUrl);
+        return next;
+      });
+    }
 
     try {
       const form = new FormData();
@@ -218,6 +234,7 @@ export function MediaUploader({
         return;
       }
 
+      fileMapRef.current.delete(localId);
       setItems((prev) => {
         const next = prev.map((it) =>
           it.localId === localId
@@ -315,6 +332,7 @@ export function MediaUploader({
 
   const removeItem = async (item: UploadedMedia) => {
     if (item.uploading) return;
+    fileMapRef.current.delete(item.localId);
 
     if (!item.dbId && item.storagePath) {
       // Upload novo, não salvo no banco — deleta do storage imediatamente
@@ -517,14 +535,27 @@ export function MediaUploader({
                 </div>
               )}
 
-              {/* Badge de erro (mesmo sem hover) */}
+              {/* Badge de erro (mesmo sem hover) — tentar de novo ou remover */}
               {item.uploadError && (
-                <button
-                  onClick={() => removeItem(item)}
-                  className="absolute top-1 right-1 w-5 h-5 bg-danger rounded flex items-center justify-center"
-                >
-                  <X size={11} className="text-white" />
-                </button>
+                <div className="absolute top-1 right-1 flex gap-1">
+                  <button
+                    onClick={() => {
+                      const file = fileMapRef.current.get(item.localId);
+                      if (file) uploadFile(file, item.localId);
+                    }}
+                    className="w-5 h-5 bg-accent rounded flex items-center justify-center hover:bg-accent-light"
+                    title="Tentar novamente"
+                  >
+                    <RotateCw size={11} className="text-dark-bg" />
+                  </button>
+                  <button
+                    onClick={() => removeItem(item)}
+                    className="w-5 h-5 bg-danger rounded flex items-center justify-center hover:bg-danger/80"
+                    title="Remover"
+                  >
+                    <X size={11} className="text-white" />
+                  </button>
+                </div>
               )}
 
               {/* Badge "Principal" (primeiro da lista) */}
