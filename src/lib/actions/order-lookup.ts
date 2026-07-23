@@ -317,3 +317,54 @@ export async function lookupOrdersByEmail(
   if (matched.length === 0) return { error: NOT_FOUND_MESSAGE };
   return { orders: matched.map(toPublicOrderDetail) };
 }
+
+// ---------------------------------------------------------------------------
+// 4. Por telefone + (e-mail OU CPF) de confirmação — telefone não é stored
+// digits-only (guarda a máscara exata digitada no checkout), então a busca
+// passa por `customers` e compara dígito a dígito em memória, mesmo
+// princípio defensivo já usado para telefone nos outros fluxos.
+// ---------------------------------------------------------------------------
+
+export type PhoneConfirmType = "email" | "cpf";
+
+export async function lookupOrdersByPhone(
+  phoneRaw: string,
+  confirmRaw: string,
+  confirmType: PhoneConfirmType
+): Promise<OrderListLookupResult> {
+  const { allowed } = await checkAndRecordLookupAttempt();
+  if (!allowed) return { error: RATE_LIMIT_MESSAGE };
+
+  const phoneDigits = digitsOnly(phoneRaw);
+  if (phoneDigits.length < 8) return { error: "Informe um telefone válido." };
+  const confirm = confirmRaw.trim();
+  if (!confirm) return { error: NOT_FOUND_MESSAGE };
+  if (confirmType === "email" && !EMAIL_REGEX.test(confirm)) return { error: "Informe um e-mail válido." };
+  if (confirmType === "cpf" && !isValidCpf(confirm)) return { error: "Informe um CPF válido." };
+
+  const service = createServiceClient();
+
+  const { data: customers } = await service
+    .from("customers")
+    .select("id, phone, email, cpf_cnpj");
+
+  const matchingIds = (customers ?? [])
+    .filter((c) => digitsOnly(c.phone) === phoneDigits)
+    .filter((c) =>
+      confirmType === "email"
+        ? c.email.toLowerCase() === confirm.toLowerCase()
+        : !!c.cpf_cnpj && digitsOnly(c.cpf_cnpj) === digitsOnly(confirm)
+    )
+    .map((c) => c.id);
+
+  if (matchingIds.length === 0) return { error: NOT_FOUND_MESSAGE };
+
+  const { data: rows } = await service
+    .from("orders")
+    .select(ORDER_PUBLIC_FIELDS)
+    .in("customer_id", matchingIds)
+    .order("created_at", { ascending: false });
+
+  if (!rows || rows.length === 0) return { error: NOT_FOUND_MESSAGE };
+  return { orders: (rows as unknown as OrderPublicRow[]).map(toPublicOrderDetail) };
+}

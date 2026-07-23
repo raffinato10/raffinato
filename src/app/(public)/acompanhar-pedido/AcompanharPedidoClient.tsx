@@ -15,12 +15,14 @@ import {
   lookupOrderByNumber,
   lookupOrdersByCpf,
   lookupOrdersByEmail,
+  lookupOrdersByPhone,
   type PublicOrderDetail,
   type OrderConfirmType,
   type EmailConfirmType,
+  type PhoneConfirmType,
 } from "@/lib/actions/order-lookup";
 
-type Method = "number" | "cpf" | "email";
+type Method = "number" | "cpf" | "email" | "phone";
 type ConfirmKind = "phone" | "email" | "cpf";
 
 type SearchResult =
@@ -105,6 +107,10 @@ export default function AcompanharPedidoClient() {
   const [emailConfirmType, setEmailConfirmType] = useState<EmailConfirmType>("phone");
   const [emailConfirmValue, setEmailConfirmValue] = useState("");
 
+  const [phone, setPhone] = useState("");
+  const [phoneConfirmType, setPhoneConfirmType] = useState<PhoneConfirmType>("email");
+  const [phoneConfirmValue, setPhoneConfirmValue] = useState("");
+
   const [loading, setLoading] = useState(false);
   // Validação client-side (campo vazio) — some sozinha, sem WhatsApp, some ao
   // corrigir o campo. Diferente de lookupError: erro real de busca (não
@@ -148,12 +154,20 @@ export default function AcompanharPedidoClient() {
         const res = await lookupOrdersByCpf(cpf, cpfConfirmValue, cpfConfirmType);
         if ("error" in res) { setLookupError(res.error); return; }
         setResult(res.orders.length === 1 ? { kind: "single", order: res.orders[0] } : { kind: "list", orders: res.orders });
-      } else {
+      } else if (method === "email") {
         if (!email.trim() || !emailConfirmValue.trim()) {
           setFormError(`Preencha o e-mail e o ${emailConfirmType === "phone" ? "telefone" : "CPF"} de confirmação.`);
           return;
         }
         const res = await lookupOrdersByEmail(email, emailConfirmValue, emailConfirmType);
+        if ("error" in res) { setLookupError(res.error); return; }
+        setResult(res.orders.length === 1 ? { kind: "single", order: res.orders[0] } : { kind: "list", orders: res.orders });
+      } else {
+        if (!phone.trim() || !phoneConfirmValue.trim()) {
+          setFormError(`Preencha o telefone e o ${phoneConfirmType === "email" ? "e-mail" : "CPF"} de confirmação.`);
+          return;
+        }
+        const res = await lookupOrdersByPhone(phone, phoneConfirmValue, phoneConfirmType);
         if ("error" in res) { setLookupError(res.error); return; }
         setResult(res.orders.length === 1 ? { kind: "single", order: res.orders[0] } : { kind: "list", orders: res.orders });
       }
@@ -186,6 +200,7 @@ export default function AcompanharPedidoClient() {
                 { value: "number", label: "Número do pedido" },
                 { value: "cpf", label: "CPF" },
                 { value: "email", label: "E-mail" },
+                { value: "phone", label: "Telefone" },
               ]}
             />
 
@@ -247,6 +262,27 @@ export default function AcompanharPedidoClient() {
                     onTypeChange={setEmailConfirmType}
                     value={emailConfirmValue}
                     onValueChange={setEmailConfirmValue}
+                    onEnter={handleSearch}
+                  />
+                </>
+              )}
+
+              {method === "phone" && (
+                <>
+                  <Input
+                    label="Telefone"
+                    placeholder="(00) 00000-0000"
+                    value={phone}
+                    onChange={(e) => setPhone(maskPhone(e.target.value))}
+                    maxLength={15}
+                    onKeyDown={(e) => e.key === "Enter" && handleSearch()}
+                  />
+                  <ConfirmField
+                    options={["email", "cpf"] as const}
+                    type={phoneConfirmType}
+                    onTypeChange={setPhoneConfirmType}
+                    value={phoneConfirmValue}
+                    onValueChange={setPhoneConfirmValue}
                     onEnter={handleSearch}
                   />
                 </>
