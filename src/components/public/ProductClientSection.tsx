@@ -66,9 +66,6 @@ export const ProductClientSection = ({ product, selectedVariant, selectedSize, c
   // Preço cartão (sem desconto por quantidade — benefício exclusivo Pix)
   const totalCard = product.price_card * qty;
 
-  // Economia Pix vs cartão
-  const pixVsCardSavings = (product.price_card - result.unitPrice) * qty;
-
   const variantImage = selectedVariant?.media.find((m) => m.is_main) ?? selectedVariant?.media[0];
   const mainImage = product.media?.find((m) => m.type === "image" && m.is_main) ?? product.media?.[0];
 
@@ -111,21 +108,13 @@ export const ProductClientSection = ({ product, selectedVariant, selectedSize, c
   const priceBlock = (
     <div className="pl-4 border-l-2 border-accent/60 py-3 pr-5 bg-dark-surface/60 rounded-r-2xl border border-dark-border space-y-1.5">
 
-      {/* Preço PIX total */}
-      <div className="flex items-baseline gap-2">
-        <span className="text-3xl font-bold text-accent">{formatCurrency(result.total)}</span>
-        <span className="text-sm text-muted font-medium">no Pix</span>
-      </div>
+      {/* Preço fixo */}
+      <span className="text-3xl font-bold text-dark-text">{formatCurrency(totalCard)}</span>
 
-      {/* Economia Pix vs cartão */}
-      {pixVsCardSavings > 0 && (
-        <p className="text-sm text-success font-medium">
-          Economize {formatCurrency(pixVsCardSavings)} pagando no Pix
-        </p>
-      )}
-
-      {/* Preço cartão */}
-      <p className="text-sm text-muted">{formatCurrency(totalCard)} no cartão de crédito</p>
+      {/* Desconto Pix */}
+      <p className="text-sm text-success font-semibold">
+        Ganhe 5% de desconto no Pix
+      </p>
 
       {/* Detalhes quando qty > 1 */}
       {qty > 1 && (

@@ -186,14 +186,11 @@ export const ProductCard = ({ product, showCategory = false }: ProductCardProps)
                 de {formatCurrency(product.price_promotional!)}
               </span>
             )}
-            <div className="flex items-baseline gap-1.5">
-              <span className="text-lg font-bold text-accent tracking-tight">
-                {formatCurrency(pixPrice)}
-              </span>
-              <span className="text-[10px] text-muted font-medium">no Pix</span>
-            </div>
-            <p className="text-[11px] text-muted/70">
-              ou {formatCurrency(product.price_card)} no cartão
+            <span className="block text-lg font-bold text-dark-text tracking-tight">
+              {formatCurrency(product.price_card)}
+            </span>
+            <p className="text-[11px] text-success font-semibold">
+              Ganhe 5% de desconto no Pix
             </p>
           </div>
 
