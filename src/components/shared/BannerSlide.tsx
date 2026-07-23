@@ -106,11 +106,10 @@ export const BannerSlide = ({
         <img src={effMobileImage} alt={title ?? "Banner"} style={mobileImgStyle} />
       </div>
 
-      {/* Overlay de legibilidade */}
-      <div className="absolute inset-0 bg-gradient-to-b from-black/55 via-black/30 to-black/65" />
-
-      {/* Texto — renderizado apenas se existir */}
+      {/* Overlay de legibilidade — só aplicado quando há texto por cima da imagem */}
       {(title || subtitle) && (
+        <>
+        <div className="absolute inset-0 bg-gradient-to-b from-black/55 via-black/30 to-black/65" />
         <div className="absolute inset-0 flex flex-col items-center justify-center text-center px-5 sm:px-8 py-20 sm:py-24">
           {title && (
             <h2 className="text-3xl sm:text-5xl lg:text-7xl font-bold text-white leading-tight mb-3 sm:mb-4 tracking-tight drop-shadow-lg">
@@ -123,6 +122,7 @@ export const BannerSlide = ({
             </p>
           )}
         </div>
+        </>
       )}
 
       {/* Faixa de promoção por quantidade — calculada do produto vinculado */}
