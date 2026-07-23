@@ -74,33 +74,3 @@ export const generateStatusWhatsAppLink = ({
 
 export const generateStoreWhatsAppLink = (storePhone = STORE_WHATSAPP): string =>
   `https://wa.me/${storePhone}`;
-
-interface WhatsAppProductPurchaseData {
-  productName: string;
-  colorName?: string;
-  size?: string;
-  quantity: number;
-  total: number;
-  storePhone?: string;
-}
-
-// Mensagem de intenção de compra de UM produto (PDP) — diferente de
-// generateSupportWhatsAppLink (dúvida genérica): já inclui cor/tamanho
-// escolhidos, quantidade e valor, pra o atendimento já saber exatamente o
-// que o cliente quer comprar.
-export const generateProductPurchaseWhatsAppLink = ({
-  productName,
-  colorName,
-  size,
-  quantity,
-  total,
-  storePhone = STORE_WHATSAPP,
-}: WhatsAppProductPurchaseData): string => {
-  const lines = ["Olá, tenho interesse neste produto:", "", `Produto: ${productName}`];
-  if (colorName) lines.push(`Cor: ${colorName}`);
-  if (size) lines.push(`Tamanho: ${size}`);
-  lines.push(`Quantidade: ${quantity}`);
-  lines.push(`Valor: R$ ${total.toFixed(2).replace(".", ",")}`);
-  const text = lines.join("\n");
-  return `https://wa.me/${storePhone}?text=${encodeURIComponent(text)}`;
-};

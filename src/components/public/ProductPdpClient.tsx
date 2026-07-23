@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { Package, CheckCircle2 } from "lucide-react";
+import { CheckCircle2 } from "lucide-react";
 import { ProductGallery } from "@/components/public/ProductGallery";
 import { ProductClientSection } from "@/components/public/ProductClientSection";
 import { Badge } from "@/components/common/Badge";
@@ -191,10 +191,6 @@ export function ProductPdpClient({ product }: Props) {
 
         {/* Trust badges */}
         <div className="flex items-center gap-4 pt-2 border-t border-dark-border/60">
-          <div className="flex items-center gap-1.5 text-xs text-muted">
-            <Package size={13} className="text-accent" />
-            <span>Entrega discreta</span>
-          </div>
           <div className="flex items-center gap-1.5 text-xs text-muted">
             <CheckCircle2 size={13} className="text-success" />
             <span>Qualidade garantida</span>

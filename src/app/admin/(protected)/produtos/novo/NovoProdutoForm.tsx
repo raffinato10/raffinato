@@ -745,15 +745,6 @@ export function NovoProdutoForm({ categoryTree, duplicateFrom, duplicateFromId }
               />
             </div>
           </SectionCard>
-
-          <SectionCard title="Comportamento">
-            <div className="flex gap-8 flex-wrap">
-              <div>
-                <p className="text-xs font-medium text-dark-text mb-1.5">Permitir WhatsApp</p>
-                <Toggle checked={allowWhatsapp} onChange={setAllowWhatsapp} />
-              </div>
-            </div>
-          </SectionCard>
         </div>
 
         {/* Coluna de preview */}
