@@ -3,19 +3,16 @@
 import { createServiceClient } from "@/lib/supabase/server";
 import { checkAndRecordLookupAttempt } from "@/lib/order-lookup-rate-limit";
 import { digitsOnly, isValidCpf } from "@/lib/cpf";
-import { maskCpfDisplay, maskPhoneDisplay, maskEmailDisplay } from "@/lib/mask";
+import { maskPhoneDisplay, maskEmailDisplay } from "@/lib/mask";
 import type { OrderStatus, PaymentStatus, PaymentMethod, OrderStatusHistory } from "@/types";
 
 // ---------------------------------------------------------------------------
-// Busca pública de pedidos (sem login) — por número, CPF ou e-mail, sempre
-// com um 2º fator de confirmação. Nunca expõe dado bruto: o mascaramento
-// acontece aqui, antes de montar a resposta — o que sai desta função já é
-// o que pode ir pra tela.
-//
-// Anti-enumeração: qualquer falha de confirmação (CPF/e-mail/pedido não
-// encontrado OU encontrado mas telefone não confere) retorna exatamente a
-// mesma mensagem genérica. Só erros de FORMATO (CPF/e-mail mal formado) têm
-// mensagem específica, porque isso não revela se aquele dado existe ou não.
+// Busca pública de pedidos (sem login) — por CPF, e-mail ou telefone, sem
+// segundo fator de confirmação (removido a pedido do lojista: prioriza
+// simplicidade de uso sobre a proteção extra contra alguém que souber um
+// desses três dados de outra pessoa). Nunca expõe dado bruto: o
+// mascaramento acontece aqui, antes de montar a resposta — o que sai desta
+// função já é o que pode ir pra tela.
 // ---------------------------------------------------------------------------
 
 const NOT_FOUND_MESSAGE =
@@ -58,7 +55,6 @@ export interface PublicOrderDetail {
   status_history: OrderStatusHistory[];
 }
 
-export type SingleOrderLookupResult = { error: string } | { order: PublicOrderDetail };
 export type OrderListLookupResult = { error: string } | { orders: PublicOrderDetail[] };
 
 const ORDER_PUBLIC_FIELDS = `
@@ -161,87 +157,24 @@ function toPublicOrderDetail(row: OrderPublicRow): PublicOrderDetail {
 }
 
 // ---------------------------------------------------------------------------
-// 1. Por número do pedido + telefone OU e-mail de confirmação
-//
-// Telefone e e-mail são sempre obrigatórios no checkout (CPF não é, por isso
-// não entra como confirmação aqui — na prática quase nunca estaria
-// preenchido). Os dois já vêm denormalizados na própria linha do pedido,
-// então não precisa de nenhuma consulta extra a `customers`.
-//
-// O cliente escolhe explicitamente qual dos dois está informando
-// (confirmType) — em vez do sistema adivinhar pelo formato do texto, que é
-// mais ambíguo e menos claro pra quem está preenchendo.
+// 1. Por CPF
 // ---------------------------------------------------------------------------
 
-export type OrderConfirmType = "phone" | "email";
-
-export async function lookupOrderByNumber(
-  orderNumberRaw: string,
-  confirmRaw: string,
-  confirmType: OrderConfirmType
-): Promise<SingleOrderLookupResult> {
-  const { allowed } = await checkAndRecordLookupAttempt();
-  if (!allowed) return { error: RATE_LIMIT_MESSAGE };
-
-  const orderNumber = orderNumberRaw.trim();
-  const confirm = confirmRaw.trim();
-  if (!orderNumber || !confirm) return { error: NOT_FOUND_MESSAGE };
-  if (confirmType === "email" && !EMAIL_REGEX.test(confirm)) return { error: "Informe um e-mail válido." };
-
-  const service = createServiceClient();
-  const { data: row } = await service
-    .from("orders")
-    .select(ORDER_PUBLIC_FIELDS)
-    .ilike("order_number", orderNumber)
-    .maybeSingle();
-
-  if (!row) return { error: NOT_FOUND_MESSAGE };
-  const order = row as unknown as OrderPublicRow;
-
-  const matches =
-    confirmType === "email"
-      ? order.customer_email.toLowerCase() === confirm.toLowerCase()
-      : digitsOnly(confirm).length >= 8 && digitsOnly(order.customer_phone) === digitsOnly(confirm);
-
-  if (!matches) return { error: NOT_FOUND_MESSAGE };
-
-  return { order: toPublicOrderDetail(order) };
-}
-
-// ---------------------------------------------------------------------------
-// 2. Por CPF + (telefone OU e-mail) de confirmação — mesmo princípio do
-// fluxo por número: o cliente escolhe qual dos dois está informando.
-// ---------------------------------------------------------------------------
-
-export async function lookupOrdersByCpf(
-  cpfRaw: string,
-  confirmRaw: string,
-  confirmType: OrderConfirmType
-): Promise<OrderListLookupResult> {
+export async function lookupOrdersByCpf(cpfRaw: string): Promise<OrderListLookupResult> {
   const { allowed } = await checkAndRecordLookupAttempt();
   if (!allowed) return { error: RATE_LIMIT_MESSAGE };
 
   if (!isValidCpf(cpfRaw)) return { error: "Informe um CPF válido." };
-  const confirm = confirmRaw.trim();
-  if (!confirm) return { error: NOT_FOUND_MESSAGE };
-  if (confirmType === "email" && !EMAIL_REGEX.test(confirm)) return { error: "Informe um e-mail válido." };
 
   const service = createServiceClient();
   const cpfDigits = digitsOnly(cpfRaw);
 
   const { data: customers } = await service
     .from("customers")
-    .select("id, phone, email")
+    .select("id")
     .eq("cpf_cnpj", cpfDigits);
 
-  const matchingIds = (customers ?? [])
-    .filter((c) =>
-      confirmType === "email"
-        ? c.email.toLowerCase() === confirm.toLowerCase()
-        : digitsOnly(confirm).length >= 8 && digitsOnly(c.phone) === digitsOnly(confirm)
-    )
-    .map((c) => c.id);
-
+  const matchingIds = (customers ?? []).map((c) => c.id);
   if (matchingIds.length === 0) return { error: NOT_FOUND_MESSAGE };
 
   const { data: rows } = await service
@@ -255,106 +188,47 @@ export async function lookupOrdersByCpf(
 }
 
 // ---------------------------------------------------------------------------
-// 3. Por e-mail + (telefone OU CPF) de confirmação — CPF não está
-// denormalizado no pedido, então quando esse for o tipo escolhido a
-// confirmação é feita contra `customers.cpf_cnpj` (1 consulta extra, só
-// nesse caso) e as ordens retornadas vêm todas por e-mail, sem filtrar
-// linha a linha.
+// 2. Por e-mail — já denormalizado na própria linha do pedido.
 // ---------------------------------------------------------------------------
 
-export type EmailConfirmType = "phone" | "cpf";
-
-export async function lookupOrdersByEmail(
-  emailRaw: string,
-  confirmRaw: string,
-  confirmType: EmailConfirmType
-): Promise<OrderListLookupResult> {
+export async function lookupOrdersByEmail(emailRaw: string): Promise<OrderListLookupResult> {
   const { allowed } = await checkAndRecordLookupAttempt();
   if (!allowed) return { error: RATE_LIMIT_MESSAGE };
 
   const email = emailRaw.trim().toLowerCase();
   if (!EMAIL_REGEX.test(email)) return { error: "Informe um e-mail válido." };
-  const confirm = confirmRaw.trim();
-  if (!confirm) return { error: NOT_FOUND_MESSAGE };
-  if (confirmType === "cpf" && !isValidCpf(confirm)) return { error: "Informe um CPF válido." };
 
   const service = createServiceClient();
-
-  if (confirmType === "cpf") {
-    const { data: customer } = await service
-      .from("customers")
-      .select("cpf_cnpj")
-      .eq("email", email)
-      .maybeSingle();
-
-    if (!customer?.cpf_cnpj || digitsOnly(customer.cpf_cnpj) !== digitsOnly(confirm)) {
-      return { error: NOT_FOUND_MESSAGE };
-    }
-
-    const { data: rows } = await service
-      .from("orders")
-      .select(ORDER_PUBLIC_FIELDS)
-      .eq("customer_email", email)
-      .order("created_at", { ascending: false });
-
-    if (!rows || rows.length === 0) return { error: NOT_FOUND_MESSAGE };
-    return { orders: (rows as unknown as OrderPublicRow[]).map(toPublicOrderDetail) };
-  }
-
-  const phoneDigits = digitsOnly(confirm);
-  if (phoneDigits.length < 8) return { error: NOT_FOUND_MESSAGE };
-
   const { data: rows } = await service
     .from("orders")
     .select(ORDER_PUBLIC_FIELDS)
     .eq("customer_email", email)
     .order("created_at", { ascending: false });
 
-  const matched = (rows as unknown as OrderPublicRow[] | null ?? []).filter(
-    (r) => digitsOnly(r.customer_phone) === phoneDigits
-  );
-
-  if (matched.length === 0) return { error: NOT_FOUND_MESSAGE };
-  return { orders: matched.map(toPublicOrderDetail) };
+  if (!rows || rows.length === 0) return { error: NOT_FOUND_MESSAGE };
+  return { orders: (rows as unknown as OrderPublicRow[]).map(toPublicOrderDetail) };
 }
 
 // ---------------------------------------------------------------------------
-// 4. Por telefone + (e-mail OU CPF) de confirmação — telefone não é stored
-// digits-only (guarda a máscara exata digitada no checkout), então a busca
-// passa por `customers` e compara dígito a dígito em memória, mesmo
-// princípio defensivo já usado para telefone nos outros fluxos.
+// 3. Por telefone — não é stored digits-only (guarda a máscara exata
+// digitada no checkout), então a busca passa por `customers` e compara
+// dígito a dígito em memória.
 // ---------------------------------------------------------------------------
 
-export type PhoneConfirmType = "email" | "cpf";
-
-export async function lookupOrdersByPhone(
-  phoneRaw: string,
-  confirmRaw: string,
-  confirmType: PhoneConfirmType
-): Promise<OrderListLookupResult> {
+export async function lookupOrdersByPhone(phoneRaw: string): Promise<OrderListLookupResult> {
   const { allowed } = await checkAndRecordLookupAttempt();
   if (!allowed) return { error: RATE_LIMIT_MESSAGE };
 
   const phoneDigits = digitsOnly(phoneRaw);
   if (phoneDigits.length < 8) return { error: "Informe um telefone válido." };
-  const confirm = confirmRaw.trim();
-  if (!confirm) return { error: NOT_FOUND_MESSAGE };
-  if (confirmType === "email" && !EMAIL_REGEX.test(confirm)) return { error: "Informe um e-mail válido." };
-  if (confirmType === "cpf" && !isValidCpf(confirm)) return { error: "Informe um CPF válido." };
 
   const service = createServiceClient();
-
   const { data: customers } = await service
     .from("customers")
-    .select("id, phone, email, cpf_cnpj");
+    .select("id, phone");
 
   const matchingIds = (customers ?? [])
     .filter((c) => digitsOnly(c.phone) === phoneDigits)
-    .filter((c) =>
-      confirmType === "email"
-        ? c.email.toLowerCase() === confirm.toLowerCase()
-        : !!c.cpf_cnpj && digitsOnly(c.cpf_cnpj) === digitsOnly(confirm)
-    )
     .map((c) => c.id);
 
   if (matchingIds.length === 0) return { error: NOT_FOUND_MESSAGE };
