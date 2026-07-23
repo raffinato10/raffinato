@@ -46,7 +46,7 @@ export const ProductGallery = ({ media, productName }: ProductGalleryProps) => {
     <div className="space-y-3">
       {/* Main display */}
       <div
-        className="relative aspect-square bg-dark-alt rounded-2xl overflow-hidden group"
+        className="relative aspect-[4/5] bg-dark-alt rounded-2xl overflow-hidden group"
         onTouchStart={onTouchStart}
         onTouchEnd={onTouchEnd}
       >
