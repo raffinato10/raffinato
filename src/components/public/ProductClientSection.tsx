@@ -109,7 +109,7 @@ export const ProductClientSection = ({ product, selectedVariant, selectedSize, c
     <div className="pl-4 border-l-2 border-accent/60 py-3 pr-5 bg-dark-surface/60 rounded-r-2xl border border-dark-border space-y-1.5">
 
       {/* Preço fixo */}
-      <span className="text-3xl font-bold text-dark-text">{formatCurrency(totalCard)}</span>
+      <span className="text-3xl font-bold text-accent">{formatCurrency(totalCard)}</span>
 
       {/* Desconto Pix */}
       <p className="text-sm text-success font-semibold">

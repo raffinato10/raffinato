@@ -186,7 +186,7 @@ export const ProductCard = ({ product, showCategory = false }: ProductCardProps)
                 de {formatCurrency(product.price_promotional!)}
               </span>
             )}
-            <span className="block text-lg font-bold text-dark-text tracking-tight">
+            <span className="block text-lg font-bold text-accent tracking-tight">
               {formatCurrency(product.price_card)}
             </span>
             <p className="text-[11px] text-success font-semibold">
