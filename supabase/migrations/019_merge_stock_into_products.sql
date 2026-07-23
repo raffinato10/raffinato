@@ -119,10 +119,9 @@ ALTER TABLE product_variants DROP CONSTRAINT IF EXISTS product_variants_owner_ch
 
 ALTER TABLE product_variants ALTER COLUMN product_id SET NOT NULL;
 
-DROP INDEX IF EXISTS idx_product_variants_stock_item;
-ALTER TABLE product_variants DROP COLUMN IF EXISTS stock_item_id;
-
 -- Policies simplificadas — sem o branch "dono = peça" (pré-015_stock_items).
+-- Precisa rodar antes do DROP COLUMN stock_item_id abaixo: as policies
+-- antigas (pré-019) dependem dessa coluna e bloqueiam a remoção.
 DROP POLICY IF EXISTS "variantes ativas são públicas" ON product_variants;
 DROP POLICY IF EXISTS "variantes de produtos ativos são públicas" ON product_variants;
 CREATE POLICY "variantes de produtos ativos são públicas"
@@ -157,6 +156,9 @@ CREATE POLICY "tamanhos de variantes de produtos ativos são públicos"
       WHERE v.id = product_variant_sizes.variant_id AND (p.is_active = TRUE OR is_admin())
     )
   );
+
+DROP INDEX IF EXISTS idx_product_variants_stock_item;
+ALTER TABLE product_variants DROP COLUMN IF EXISTS stock_item_id;
 
 -- -----------------------------------------------------------------------------
 -- 4. Remove a curadoria (product_colors/product_color_images) — sem mais
