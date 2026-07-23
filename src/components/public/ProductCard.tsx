@@ -92,6 +92,7 @@ export const ProductCard = ({ product, showCategory = false }: ProductCardProps)
             src={cardImageShown}
             alt={mainImage?.alt_text || product.name}
             fill
+            sizes="(min-width: 1280px) 25vw, (min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw"
             className="object-cover group-hover:scale-107 transition-transform duration-700 ease-out"
           />
         ) : (

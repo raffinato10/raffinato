@@ -64,6 +64,7 @@ export const ProductGallery = ({ media, productName }: ProductGalleryProps) => {
               src={selected.url}
               alt={selected.alt_text || productName}
               fill
+              sizes="(min-width: 1024px) 50vw, 100vw"
               className="object-cover"
               priority
             />
@@ -137,6 +138,7 @@ export const ProductGallery = ({ media, productName }: ProductGalleryProps) => {
                     src={item.thumbnail_url || "https://placehold.co/64x64/1e2535/c9a84c?text=▶"}
                     alt="Vídeo"
                     fill
+                    sizes="64px"
                     className="object-cover"
                   />
                   <div className="absolute inset-0 flex items-center justify-center bg-black/30">
@@ -148,6 +150,7 @@ export const ProductGallery = ({ media, productName }: ProductGalleryProps) => {
                   src={item.url}
                   alt={item.alt_text || `Foto ${i + 1}`}
                   fill
+                  sizes="64px"
                   className="object-cover"
                 />
               )}
