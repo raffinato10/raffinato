@@ -5,7 +5,7 @@
 import { createServiceClient } from "@/lib/supabase/server";
 import type { Category, Product, ProductMedia, ProductSpecification, ProductFAQ, ProductAvailability, PriceTier } from "@/types";
 import type { DbCategory, DbProduct, DbProductMedia } from "@/types/database.types";
-import { VARIANT_FIELDS, toVariant, attachStockItemVariants, type VariantRowWithRelations } from "@/lib/db/variant-mappers";
+import { VARIANT_FIELDS, toVariant, type VariantRowWithRelations } from "@/lib/db/variant-mappers";
 
 // ---------------------------------------------------------------------------
 // Tipos para o admin (inclui campos omitidos na camada pública)
@@ -228,7 +228,7 @@ const PRODUCT_FIELDS_ADMIN = `
   internal_notes,
   meta_title, meta_description,
   badge_image_url, badge_storage_path, badge_position_x, badge_position_y, badge_width_pct,
-  display_order, stock_item_id,
+  display_order,
   created_at, updated_at,
   product_media (
     id, product_id, type, url, thumbnail_url, alt_text,
@@ -303,7 +303,6 @@ function toAdminProduct(row: AdminProductRowWithRelations): AdminProduct {
     badge_position_y:    row.badge_position_y,
     badge_width_pct:     row.badge_width_pct,
     display_order:       row.display_order,
-    stock_item_id:       row.stock_item_id ?? undefined,
     created_at:          row.created_at,
     updated_at:          row.updated_at,
     media:               row.product_media
@@ -329,11 +328,9 @@ export async function getAllProductsAdmin(): Promise<AdminProduct[]> {
 
   if (error) throw error;
 
-  const products = (data ?? []).map((row) =>
+  return (data ?? []).map((row) =>
     toAdminProduct(row as AdminProductRowWithRelations)
   );
-  await attachStockItemVariants(supabase, products);
-  return products;
 }
 
 // Produto pelo ID para a página de edição (inclui todos os campos)
@@ -352,7 +349,5 @@ export async function getProductByIdAdmin(id: string): Promise<AdminProduct | nu
   }
 
   if (!data) return null;
-  const product = toAdminProduct(data as AdminProductRowWithRelations);
-  await attachStockItemVariants(supabase, [product]);
-  return product;
+  return toAdminProduct(data as AdminProductRowWithRelations);
 }

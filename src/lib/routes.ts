@@ -16,7 +16,6 @@ export const routes = {
     produtos: "/admin/produtos",
     novoProduto: "/admin/produtos/novo",
     editarProduto: (id: string) => `/admin/produtos/${id}/editar`,
-    estoque: "/admin/estoque",
     categorias: "/admin/categorias",
     cupons: "/admin/cupons",
     clientes: "/admin/clientes",

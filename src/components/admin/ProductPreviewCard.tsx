@@ -75,7 +75,7 @@ export const ProductPreviewCard = ({
               title="Pré-visualização do vídeo"
             />
           ) : (
-            <Image src={current.url} alt={name} fill className="object-cover" unoptimized />
+            <Image src={current.url} alt={name} fill className="object-cover" />
           )
         ) : (
           <div className="w-full h-full flex items-center justify-center">

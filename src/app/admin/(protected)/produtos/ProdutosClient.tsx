@@ -263,7 +263,6 @@ export function ProdutosClient({ initialProducts, categoryOptions }: Props) {
                               alt={product.name}
                               fill
                               className="object-cover"
-                              unoptimized
                             />
                           ) : (
                             <div className="w-full h-full flex items-center justify-center text-muted text-xs">

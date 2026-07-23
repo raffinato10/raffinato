@@ -30,7 +30,6 @@ export const CartItem = ({ item }: CartItemProps) => {
             alt={item.product_name}
             fill
             className="object-cover"
-            unoptimized
           />
         ) : (
           <div className="w-full h-full flex items-center justify-center text-muted text-xs">

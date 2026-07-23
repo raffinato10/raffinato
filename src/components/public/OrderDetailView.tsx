@@ -140,7 +140,7 @@ export function OrderDetailView({ order }: Props) {
             <div key={item.id} className="flex items-center gap-3 py-3 border-b border-dark-border last:border-0">
               <div className="w-12 h-12 rounded-lg bg-dark-alt border border-dark-border overflow-hidden flex-shrink-0 flex items-center justify-center">
                 {item.product_image ? (
-                  <Image src={item.product_image} alt={item.product_name} width={48} height={48} className="object-cover w-full h-full" unoptimized />
+                  <Image src={item.product_image} alt={item.product_name} width={48} height={48} className="object-cover w-full h-full" />
                 ) : (
                   <ImageIcon size={16} className="text-muted" />
                 )}

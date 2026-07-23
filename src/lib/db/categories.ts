@@ -17,12 +17,15 @@ const CATEGORY_FIELDS = `
   created_at, updated_at
 ` as const;
 
-// Busca a imagem principal do primeiro produto de cada categoria
-// — usado como fallback quando a categoria não tem image_url própria
-async function fetchFirstProductImages(
-  categoryIds: string[]
-): Promise<Record<string, string>> {
-  if (categoryIds.length === 0) return {};
+type ProductAggregates = {
+  counts: Record<string, number>;
+  firstImages: Record<string, string>;
+};
+
+// Conta produtos ativos por categoria e resolve a imagem do primeiro produto
+// (fallback para categorias sem image_url própria) — uma única query para os dois.
+async function fetchProductAggregates(categoryIds: string[]): Promise<ProductAggregates> {
+  if (categoryIds.length === 0) return { counts: {}, firstImages: {} };
 
   const supabase = await createClient();
 
@@ -32,16 +35,17 @@ async function fetchFirstProductImages(
     .eq("is_active", true)
     .in("category_id", categoryIds);
 
-  if (!data) return {};
-
   type MediaRow = { url: string; is_main: boolean; display_order: number };
   type ProductRow = { id: string; category_id: string; product_media: MediaRow[] | null };
 
-  const result: Record<string, string> = {};
+  const counts: Record<string, number> = {};
+  const firstImages: Record<string, string> = {};
 
-  for (const raw of data) {
+  for (const raw of data ?? []) {
     const row = raw as unknown as ProductRow;
-    if (result[row.category_id]) continue;
+    counts[row.category_id] = (counts[row.category_id] ?? 0) + 1;
+
+    if (firstImages[row.category_id]) continue;
 
     const media = row.product_media ?? [];
     const sorted = [...media].sort((a, b) => {
@@ -51,30 +55,11 @@ async function fetchFirstProductImages(
     });
 
     if (sorted[0]?.url) {
-      result[row.category_id] = sorted[0].url;
+      firstImages[row.category_id] = sorted[0].url;
     }
   }
 
-  return result;
-}
-
-// Conta produtos ativos por categoria em uma única query
-async function fetchProductCounts(
-  categoryIds: string[]
-): Promise<Record<string, number>> {
-  if (categoryIds.length === 0) return {};
-
-  const supabase = await createClient();
-  const { data } = await supabase
-    .from("products")
-    .select("category_id")
-    .eq("is_active", true)
-    .in("category_id", categoryIds);
-
-  return (data ?? []).reduce<Record<string, number>>((acc, row) => {
-    acc[row.category_id] = (acc[row.category_id] ?? 0) + 1;
-    return acc;
-  }, {});
+  return { counts, firstImages };
 }
 
 function toCategory(row: DbCategory, productCount?: number): Category {
@@ -123,17 +108,13 @@ export async function getFeaturedCategories(): Promise<Category[]> {
   if (error) throw error;
   if (!data || data.length === 0) return [];
 
-  const counts     = await fetchProductCounts(data.map((c) => c.id));
+  const { counts, firstImages } = await fetchProductAggregates(data.map((c) => c.id));
   const categories = data.map((c) => toCategory(c, counts[c.id] ?? 0));
 
   // Categorias sem image_url própria recebem a imagem do primeiro produto
-  const idsWithoutImage = categories.filter((c) => !c.image_url).map((c) => c.id);
-  const firstProductImages =
-    idsWithoutImage.length > 0 ? await fetchFirstProductImages(idsWithoutImage) : {};
-
   return categories.map((c) => ({
     ...c,
-    first_product_image_url: firstProductImages[c.id],
+    first_product_image_url: c.image_url ? undefined : firstImages[c.id],
   }));
 }
 
@@ -150,17 +131,13 @@ export async function getAllActiveCategories(): Promise<Category[]> {
   if (error) throw error;
   if (!data || data.length === 0) return [];
 
-  const counts     = await fetchProductCounts(data.map((c) => c.id));
+  const { counts, firstImages } = await fetchProductAggregates(data.map((c) => c.id));
   const categories = data.map((c) => toCategory(c, counts[c.id] ?? 0));
 
   // Categorias sem image_url própria recebem a imagem do primeiro produto
-  const idsWithoutImage = categories.filter((c) => !c.image_url).map((c) => c.id);
-  const firstProductImages =
-    idsWithoutImage.length > 0 ? await fetchFirstProductImages(idsWithoutImage) : {};
-
   return categories.map((c) => ({
     ...c,
-    first_product_image_url: firstProductImages[c.id],
+    first_product_image_url: c.image_url ? undefined : firstImages[c.id],
   }));
 }
 
@@ -212,15 +189,11 @@ export async function getChildCategories(parentId: string): Promise<Category[]> 
   if (error) throw error;
   if (!data || data.length === 0) return [];
 
-  const counts = await fetchProductCounts(data.map((c) => c.id));
+  const { counts, firstImages } = await fetchProductAggregates(data.map((c) => c.id));
   const categories = data.map((c) => toCategory(c, counts[c.id] ?? 0));
-
-  const idsWithoutImage = categories.filter((c) => !c.image_url).map((c) => c.id);
-  const firstProductImages =
-    idsWithoutImage.length > 0 ? await fetchFirstProductImages(idsWithoutImage) : {};
 
   return categories.map((c) => ({
     ...c,
-    first_product_image_url: firstProductImages[c.id],
+    first_product_image_url: c.image_url ? undefined : firstImages[c.id],
   }));
 }

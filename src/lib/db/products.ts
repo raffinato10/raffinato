@@ -16,7 +16,7 @@ import type {
   DbProductMedia,
   DbCategory,
 } from "@/types/database.types";
-import { VARIANT_FIELDS, toVariant, attachStockItemVariants, type VariantRowWithRelations } from "@/lib/db/variant-mappers";
+import { VARIANT_FIELDS, toVariant, type VariantRowWithRelations } from "@/lib/db/variant-mappers";
 
 // Campos seguros: exclui internal_notes e cost_price (bloqueados pela column-level security)
 const PRODUCT_FIELDS = `
@@ -30,13 +30,38 @@ const PRODUCT_FIELDS = `
   allow_whatsapp,
   meta_title, meta_description,
   badge_image_url, badge_position_x, badge_position_y, badge_width_pct,
-  display_order, stock_item_id,
+  display_order,
   created_at, updated_at,
   product_media (
     id, product_id, type, url, thumbnail_url, alt_text,
     display_order, is_main, created_at
   ),
   product_variants ( ${VARIANT_FIELDS} )
+` as const;
+
+// Campos para a Home — igual a PRODUCT_FIELDS, mas sem product_variant_sizes:
+// o card da Home nunca lista tamanhos, só a imagem principal/hover de cada cor.
+const FEATURED_PRODUCT_FIELDS = `
+  id, name, slug, sku, category_id,
+  price_pix, price_card, price_promotional, promotional_active,
+  is_active, is_featured,
+  short_description, description, benefits, specifications, faq, warnings,
+  stock, stock_minimum, availability, track_stock,
+  quantity_pricing_enabled, price_tiers,
+  weight_kg, height_cm, width_cm, length_cm, extra_handling_days,
+  allow_whatsapp,
+  meta_title, meta_description,
+  badge_image_url, badge_position_x, badge_position_y, badge_width_pct,
+  display_order,
+  created_at, updated_at,
+  product_media (
+    id, product_id, type, url, thumbnail_url, alt_text,
+    display_order, is_main, created_at
+  ),
+  product_variants (
+    id, product_id, color_name, color_hex, display_order, is_active, created_at, updated_at,
+    product_variant_media ( id, variant_id, url, storage_path, is_main, is_hover, display_order, created_at )
+  )
 ` as const;
 
 function toMedia(row: DbProductMedia): ProductMedia {
@@ -102,7 +127,6 @@ function toProduct(row: ProductRowWithRelations): Product {
     badge_position_y:    row.badge_position_y,
     badge_width_pct:     row.badge_width_pct,
     display_order:       row.display_order,
-    stock_item_id:       row.stock_item_id ?? undefined,
     created_at:          row.created_at,
     updated_at:          row.updated_at,
     media:               row.product_media
@@ -122,16 +146,14 @@ export async function getFeaturedProducts(): Promise<Product[]> {
 
   const { data, error } = await supabase
     .from("products")
-    .select(PRODUCT_FIELDS)
+    .select(FEATURED_PRODUCT_FIELDS)
     .eq("is_active", true)
     .eq("is_featured", true)
     .order("created_at", { ascending: false });
 
   if (error) throw error;
 
-  const products = (data ?? []).map((row) => toProduct(row as ProductRowWithRelations));
-  await attachStockItemVariants(supabase, products);
-  return products;
+  return (data ?? []).map((row) => toProduct(row as ProductRowWithRelations));
 }
 
 // Produtos ativos de uma categoria (para página /categoria/[slug])
@@ -147,9 +169,7 @@ export async function getProductsByCategory(categoryId: string): Promise<Product
 
   if (error) throw error;
 
-  const products = (data ?? []).map((row) => toProduct(row as ProductRowWithRelations));
-  await attachStockItemVariants(supabase, products);
-  return products;
+  return (data ?? []).map((row) => toProduct(row as ProductRowWithRelations));
 }
 
 // Produtos ativos de várias categorias ao mesmo tempo (para a vitrine de uma
@@ -168,9 +188,7 @@ export async function getProductsByCategoryIds(categoryIds: string[]): Promise<P
 
   if (error) throw error;
 
-  const products = (data ?? []).map((row) => toProduct(row as ProductRowWithRelations));
-  await attachStockItemVariants(supabase, products);
-  return products;
+  return (data ?? []).map((row) => toProduct(row as ProductRowWithRelations));
 }
 
 // Produto pelo slug (para página /produtos/[slug]) — inclui categoria para breadcrumb e badge
@@ -191,7 +209,6 @@ export async function getProductBySlug(slug: string): Promise<Product | null> {
   if (!data) return null;
 
   const product = toProduct(data as ProductRowWithRelations);
-  await attachStockItemVariants(supabase, [product]);
 
   // Busca categoria separadamente para breadcrumb e badge de categoria
   const { data: catData } = await supabase
@@ -246,7 +263,5 @@ export async function getRelatedProducts(
 
   if (error) throw error;
 
-  const products = (data ?? []).map((row) => toProduct(row as ProductRowWithRelations));
-  await attachStockItemVariants(supabase, products);
-  return products;
+  return (data ?? []).map((row) => toProduct(row as ProductRowWithRelations));
 }

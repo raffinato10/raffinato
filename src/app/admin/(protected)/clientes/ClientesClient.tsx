@@ -7,7 +7,7 @@ import { StatCard } from "@/components/admin/StatCard";
 import { Badge } from "@/components/common/Badge";
 import { SearchInput } from "@/components/common/SearchInput";
 import { formatCurrency, formatDate } from "@/lib/formatters";
-import { computeCustomerMetrics } from "@/lib/db/customers";
+import { computeCustomerMetrics } from "@/lib/customer-metrics";
 import { routes } from "@/lib/routes";
 import type { Customer } from "@/types";
 

@@ -133,7 +133,6 @@ export function CategoriasClient({ initialCategories, parentOptions }: Props) {
                               alt={cat.name}
                               fill
                               className="object-cover"
-                              unoptimized
                             />
                           </div>
                         )}

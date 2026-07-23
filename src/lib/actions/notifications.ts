@@ -2,7 +2,6 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/server";
-import { getAllStockItemsAdmin } from "@/lib/db/stock";
 import { routes } from "@/lib/routes";
 
 async function requireAdmin() {
@@ -51,8 +50,8 @@ function buildTestNotifications(): AdminNotification[] {
   return [
     { id: "test-order-1", type: "order", severity: "danger", title: "Pedido #1042", subtitle: "Aguardando validação · Maria Silva", href: routes.admin.pedidos, date: now },
     { id: "test-order-2", type: "order", severity: "warning", title: "Pedido #1041", subtitle: "Pagamento pendente · João Pereira", href: routes.admin.pedidos, date: now },
-    { id: "test-stock-1", type: "stock", severity: "danger", title: "Camisa Polo Branca", subtitle: "Sem estoque", href: routes.admin.estoque, date: now },
-    { id: "test-stock-2", type: "stock", severity: "warning", title: "Calça Jeans Slim", subtitle: "Estoque crítico · 2 un.", href: routes.admin.estoque, date: now },
+    { id: "test-stock-1", type: "stock", severity: "danger", title: "Camisa Polo Branca", subtitle: "Sem estoque", href: routes.admin.produtos, date: now },
+    { id: "test-stock-2", type: "stock", severity: "warning", title: "Calça Jeans Slim", subtitle: "Estoque crítico · 2 un.", href: routes.admin.produtos, date: now },
     { id: "test-coupon-1", type: "coupon", severity: "warning", title: "Cupom BLACKFRIDAY10", subtitle: "Expira em até 7 dias", href: routes.admin.cupons, date: now },
   ];
 }
@@ -99,27 +98,48 @@ export async function getAdminNotifications(): Promise<AdminNotification[] | { e
   }
 
   // --- Estoque crítico -------------------------------------------------------
-  const stockItems = await getAllStockItemsAdmin();
-  const stockNotifications = stockItems
-    .filter((s) => s.is_active)
-    .map((s) => {
-      const total = s.variants.reduce(
-        (sum, v) => sum + v.sizes.filter((sz) => sz.is_active).reduce((a, sz) => a + sz.stock, 0),
-        0
-      );
-      return { item: s, total };
+  // Estoque real: soma dos tamanhos ativos das cores ativas (produto com
+  // variação) ou o campo flat `stock` (produto de tamanho único).
+  const { data: products } = await service
+    .from("products")
+    .select(`
+      id, name, is_active, track_stock, stock, updated_at,
+      product_variants ( is_active, product_variant_sizes ( stock, is_active ) )
+    `)
+    .eq("is_active", true);
+
+  type StockProductRow = {
+    id: string;
+    name: string;
+    track_stock: boolean;
+    stock: number | null;
+    updated_at: string;
+    product_variants: { is_active: boolean; product_variant_sizes: { stock: number; is_active: boolean }[] }[];
+  };
+
+  const stockNotifications = ((products ?? []) as unknown as StockProductRow[])
+    .map((p) => {
+      const hasVariants = p.product_variants.length > 0;
+      const total = hasVariants
+        ? p.product_variants
+            .filter((v) => v.is_active)
+            .reduce((sum, v) => sum + v.product_variant_sizes.filter((sz) => sz.is_active).reduce((a, sz) => a + sz.stock, 0), 0)
+        : p.track_stock
+        ? p.stock ?? 0
+        : null; // estoque ilimitado — nunca crítico
+      return { product: p, total };
     })
-    .filter(({ total }) => total <= STOCK_CRITICAL_THRESHOLD)
+    .filter((r): r is { product: StockProductRow; total: number } => r.total !== null && r.total <= STOCK_CRITICAL_THRESHOLD)
     .sort((a, b) => a.total - b.total)
     .slice(0, MAX_PER_TYPE)
-    .map(({ item, total }): AdminNotification => ({
-      id: `stock-${item.id}`,
+    .map(({ product, total }): AdminNotification => ({
+      id: `stock-${product.id}`,
       type: "stock",
       severity: total === 0 ? "danger" : "warning",
-      title: item.name,
+      title: product.name,
       subtitle: total === 0 ? "Sem estoque" : `Estoque crítico · ${total} un.`,
-      href: routes.admin.estoque,
-      date: item.updated_at,
+      href: routes.admin.editarProduto(product.id),
+      date: product.updated_at,
     }));
   notifications.push(...stockNotifications);
 

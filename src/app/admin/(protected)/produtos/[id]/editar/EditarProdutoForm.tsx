@@ -15,13 +15,9 @@ import { PriceTierEditor } from "@/components/admin/PriceTierEditor";
 import { ProductBadgeEditor } from "@/components/admin/ProductBadgeEditor";
 import { VariantEditor } from "@/components/admin/VariantEditor";
 import { ProductSizeEditor } from "@/components/admin/ProductSizeEditor";
-import { StockItemLinkPicker } from "@/components/admin/StockItemLinkPicker";
-import { ProductColorCurator } from "@/components/admin/ProductColorCurator";
 import { updateProduct, deleteProduct } from "@/lib/actions/products";
 import { saveMediaChanges } from "@/lib/actions/media";
 import { saveVariants } from "@/lib/actions/variants";
-import { saveProductColors, clearProductColors, getProductColors } from "@/lib/actions/product-colors";
-import { getStockItemForLinkPreview } from "@/lib/actions/stock-items";
 import { routes } from "@/lib/routes";
 import { slugify } from "@/lib/formatters";
 import type { ProductFormData } from "@/lib/actions/products";
@@ -30,10 +26,9 @@ import type { UploadedMedia } from "@/components/admin/MediaUploader";
 import type { ProductBadgeValue } from "@/components/admin/ProductBadgeEditor";
 import type { VariantInput } from "@/lib/actions/variants";
 import type { SimpleSizeInput } from "@/components/admin/ProductSizeEditor";
-import type { ProductColorInput } from "@/lib/actions/product-colors";
-import type { PriceTier, ProductSpecification, ProductMedia, ProductAvailability, Product, StockItem, ProductColor } from "@/types";
+import type { PriceTier, ProductSpecification, ProductMedia, ProductAvailability, Product } from "@/types";
 
-const SPEC_LABELS = ["Tecido", "Tamanhos disponíveis", "Modelagem", "Cuidados de lavagem"] as const;
+const SPEC_LABELS = ["Tecido", "Modelagem", "Cuidados de lavagem"] as const;
 
 function specsToFields(specs: ProductSpecification[] | undefined) {
   const map = new Map((specs ?? []).map((s) => [s.label, s.value]));
@@ -138,9 +133,8 @@ export function EditarProdutoForm({ product, categoryTree }: Props) {
   const [priceTiers, setPriceTiers] = useState<PriceTier[]>(product.price_tiers ?? []);
   const initialSpecs = specsToFields(product.specifications);
   const [specComposicao, setSpecComposicao] = useState(initialSpecs[0]);
-  const [specVolume, setSpecVolume] = useState(initialSpecs[1]);
-  const [specAplicacoes, setSpecAplicacoes] = useState(initialSpecs[2]);
-  const [specConservacao, setSpecConservacao] = useState(initialSpecs[3]);
+  const [specAplicacoes, setSpecAplicacoes] = useState(initialSpecs[1]);
+  const [specConservacao, setSpecConservacao] = useState(initialSpecs[2]);
   const [weight, setWeight] = useState(product.weight_kg.toString());
   const [height, setHeight] = useState(product.height_cm.toString());
   const [width, setWidth] = useState(product.width_cm.toString());
@@ -162,60 +156,8 @@ export function EditarProdutoForm({ product, categoryTree }: Props) {
   );
   const [simpleSizes, setSimpleSizes] = useState<SimpleSizeInput[]>([]);
 
-  // Origem do produto: manual ou vinculado a uma peça do estoque. Se já
-  // vinculado, sintetiza um StockItem a partir do que já vem em `product`
-  // (já resolvido server-side via attachStockItemVariants) — assim
-  // hasVariants fica correto imediatamente, sem esperar nenhum fetch. O
-  // fetch abaixo só corrige o nome de exibição da peça.
-  const [origin, setOrigin] = useState<"manual" | "linked">(product.stock_item_id ? "linked" : "manual");
-  const [linkedStockItem, setLinkedStockItem] = useState<StockItem | null>(() =>
-    product.stock_item_id
-      ? {
-          id: product.stock_item_id,
-          name: "Peça do estoque",
-          base_sku: product.sku,
-          is_active: true,
-          variants: product.variants ?? [],
-          created_at: product.created_at,
-          updated_at: product.updated_at,
-        }
-      : null
-  );
-
-  useEffect(() => {
-    if (!product.stock_item_id) return;
-    getStockItemForLinkPreview(product.stock_item_id).then((item) => {
-      if (item && !("error" in item)) setLinkedStockItem(item);
-    });
-  }, [product.stock_item_id]);
-
-  // Curadoria de cores já salva (product_colors) — formato bruto com dbIds,
-  // diferente de product.variants (que já vem remodelado pra loja pública).
-  // Só existe pra carregar quando o produto JÁ estava vinculado a esta
-  // mesma peça; se o admin trocar de peça, o ProductColorCurator é
-  // remontado (key=linkedStockItem.id) e parte de uma seleção nova, vazia.
-  const originalStockItemId = product.stock_item_id ?? null;
-  const [initialColors, setInitialColors] = useState<ProductColor[]>([]);
-  const [colorsLoading, setColorsLoading] = useState(!!originalStockItemId);
-  const [colors, setColors] = useState<ProductColorInput[]>([]);
-  const [removedColorIds, setRemovedColorIds] = useState<string[]>([]);
-
-  // Refaz a busca após cada save bem-sucedido (product.updated_at muda) —
-  // mesmo motivo do key=product.updated_at no MediaUploader/VariantEditor:
-  // sem isso, o curator nunca aprenderia os dbIds das cores recém-criadas e
-  // duplicaria tudo a cada novo clique em "Salvar".
-  useEffect(() => {
-    if (!originalStockItemId) return;
-    setColorsLoading(true);
-    getProductColors(product.id).then((result) => {
-      if (!("error" in result)) setInitialColors(result);
-      setColorsLoading(false);
-    });
-  }, [product.id, product.updated_at, originalStockItemId]);
-
   const manualSizes = colorMode === "single" ? simpleSizes : variants.flatMap((v) => v.sizes);
-  const hasVariants =
-    origin === "linked" ? (linkedStockItem?.variants.length ?? 0) > 0 : manualSizes.length > 0;
+  const hasVariants = manualSizes.length > 0;
   const manualStockTotal = manualSizes.reduce((sum, s) => sum + (Number(s.stock) || 0), 0);
 
   const [badge, setBadge] = useState<ProductBadgeValue | null>(
@@ -286,16 +228,7 @@ export function EditarProdutoForm({ product, categoryTree }: Props) {
       // lados partem de tipos diferentes (ProductVariant[] vs VariantInput[])
       // e comparar os objetos crus dispararia "alterações não salvas" mesmo
       // sem nenhuma edição, igual ao cuidado já tomado com `media` acima.
-      // Vinculado a uma peça, a seção "Cores e tamanhos" nem aparece (edita-se
-      // em Estoque) — por isso fica fora da comparação nesse modo.
-      origin: product.stock_item_id ? "linked" : "manual",
-      linkedStockItemId: product.stock_item_id ?? null,
-      // Forma comparável com o currentSnapshot abaixo: "tamanho único" só
-      // compara os tamanhos (sem cor/mídia, que aqui são sempre a peça
-      // neutra), "várias cores" mantém a forma completa de sempre.
-      variants: product.stock_item_id
-        ? []
-        : (product.variants?.length ?? 0) > 1
+      variants: (product.variants?.length ?? 0) > 1
         ? (product.variants ?? []).map((v) => ({
             color_name: v.color_name,
             color_hex: v.color_hex,
@@ -310,8 +243,7 @@ export function EditarProdutoForm({ product, categoryTree }: Props) {
     name, slug, sku, categoryId, isActive, isFeatured, shortDesc, description,
     benefits, warnings, pricePix, priceCard, pricePromo, promotionalActive,
     trackStock, stock, stockMin, quantityPricingEnabled, priceTiers,
-    origin, linkedStockItemId: linkedStockItem?.id ?? null,
-    specs: [specComposicao, specVolume, specAplicacoes, specConservacao],
+    specs: [specComposicao, specAplicacoes, specConservacao],
     weight, height, width, length, handlingDays, allowWhatsapp, badge,
     media: mediaItems
       .filter((m) => !m.uploading && !m.uploadError)
@@ -363,26 +295,13 @@ export function EditarProdutoForm({ product, categoryTree }: Props) {
     return () => document.removeEventListener("click", handleLinkClick, true);
   }, []);
 
-  // Vinculado, o preview usa as imagens da cor principal escolhida na
-  // curadoria — não o uploader "Foto principal" (que nesse modo é só capa
-  // de reserva). Sem cor principal ainda, cai no uploader normal.
-  const mainColorImages = colors.find((c) => c.is_main)?.images;
-  const previewMedia =
-    origin === "linked" && mainColorImages && mainColorImages.length > 0
-      ? mainColorImages.slice().sort((a, b) => a.display_order - b.display_order).map((img) => ({ url: img.url, type: "image" as const }))
-      : mediaItems.filter((m) => !m.uploading && !m.uploadError).map((m) => ({ url: m.url, type: m.type }));
-
-  // Vinculado a uma peça, os tamanhos já são conhecidos (vêm do estoque) —
-  // não faz sentido pedir pro admin digitar de novo algo que já existe.
-  const linkedSizesLabel =
-    origin === "linked" && linkedStockItem
-      ? Array.from(new Set(linkedStockItem.variants.flatMap((v) => v.sizes.map((s) => s.size)))).join(", ")
-      : "";
-  const effectiveSpecVolume = origin === "linked" ? linkedSizesLabel : specVolume;
+  const previewMedia = mediaItems
+    .filter((m) => !m.uploading && !m.uploadError)
+    .map((m) => ({ url: m.url, type: m.type }));
 
   const specifications: ProductSpecification[] = SPEC_LABELS.map((label, i) => ({
     label,
-    value: [specComposicao, effectiveSpecVolume, specAplicacoes, specConservacao][i],
+    value: [specComposicao, specAplicacoes, specConservacao][i],
   }));
 
   // Produto "ao vivo" a partir do estado atual do formulário, SEM os campos
@@ -447,8 +366,7 @@ export function EditarProdutoForm({ product, categoryTree }: Props) {
   const buildPayload = (): ProductFormData => ({
     name,
     slug,
-    sku: origin === "linked" ? (linkedStockItem?.base_sku ?? sku) : sku,
-    stock_item_id:       origin === "linked" ? (linkedStockItem?.id ?? null) : null,
+    sku,
     category_id:         categoryId,
     price_pix:           parseFloat(pricePix)  || 0,
     price_card:          parseFloat(priceCard) || 0,
@@ -483,34 +401,14 @@ export function EditarProdutoForm({ product, categoryTree }: Props) {
     setError(null);
     setSaved(false);
 
-    if (origin === "linked" && !linkedStockItem) {
-      setError("Selecione uma peça do estoque para vincular, ou troque para \"Manual\".");
-      return;
-    }
-    if (origin === "linked" && colorsLoading) {
-      setError("Aguarde o carregamento das cores antes de salvar.");
-      return;
-    }
-    if (origin === "linked" && isActive && colors.length < 1) {
-      setError("Adicione pelo menos uma cor da peça vinculada, ou desative o produto.");
-      return;
-    }
-
     // "Tamanho único" usa a "Foto principal" como imagem da variante única —
     // por isso sempre exige foto nesse modo, igual ao produto sem variação.
     const imageCount = mediaItems.filter((m) => m.type === "image" && !m.uploadError).length;
-    const needsTopImage = origin === "manual" && (colorMode === "single" || !hasVariants);
+    const needsTopImage = colorMode === "single" || !hasVariants;
     if (needsTopImage && imageCount < 1) {
       setError("Adicione pelo menos 1 imagem do produto.");
       return;
     }
-
-    // A peça vinculada mudou (ou o produto saiu do modo vinculado) — a
-    // curadoria antiga (product_colors) referencia variantes de uma peça
-    // que este produto não usa mais e precisa ser totalmente substituída,
-    // não só incrementalmente ajustada.
-    const newStockItemId = origin === "linked" ? linkedStockItem?.id ?? null : null;
-    const stockItemChanged = newStockItemId !== originalStockItemId;
 
     startTransition(async () => {
       const result = await updateProduct(product.id, buildPayload());
@@ -519,78 +417,53 @@ export function EditarProdutoForm({ product, categoryTree }: Props) {
       const mediaResult = await saveMediaChanges(product.id, mediaItems, removedDbIds);
       if (mediaResult.error) { setError(mediaResult.error); return; }
 
-      // Vinculado a uma peça, as variações já existem em Estoque — não há
-      // nada pra salvar aqui. "Tamanho único" monta 1 variante com cor
-      // neutra (nunca exibida) usando as fotos da "Foto principal" — sem
-      // isso, a galeria da PDP ficaria vazia (ela usa a mídia da variante,
-      // não a do produto, quando há variação). Preserva o dbId da variante
-      // única existente pra não duplicar a cada save.
-      if (origin === "manual") {
-        const variantsToSave: VariantInput[] =
-          colorMode === "single"
-            ? simpleSizes.length > 0
-              ? [{
-                  dbId: existingSingleVariant?.id,
-                  color_name: existingSingleVariant?.color_name || "Padrão",
-                  color_hex: existingSingleVariant?.color_hex || "#000000",
-                  display_order: 0,
-                  is_active: true,
-                  // Casa pela URL com a mídia da variante já salva, pra
-                  // preservar o dbId — sem isso, TODA imagem era tratada
-                  // como nova a cada save, apagando e recriando a mesma
-                  // linha (e, por compartilhar o arquivo com a foto
-                  // principal, arriscando apagar o arquivo físico também).
-                  media: mediaItems
-                    .filter((m) => !m.uploading && !m.uploadError && m.type === "image")
-                    .map((m, i) => {
-                      const existingMedia = existingSingleVariant?.media.find((em) => em.url === m.url);
-                      return {
-                        dbId: existingMedia?.id,
-                        url: m.url,
-                        storagePath: m.storagePath ?? existingMedia?.storage_path,
-                        is_main: i === 0,
-                        is_hover: false,
-                        display_order: i,
-                      };
-                    }),
-                  sizes: simpleSizes.map((s) => ({
-                    dbId: s.dbId, size: s.size, stock: s.stock, sku: s.sku, low_stock_alert: 5, is_active: s.is_active,
-                  })),
-                }]
-              // Sem tamanho nenhum — se já existia uma variante única, ela é
-              // excluída via removedIdsToSend abaixo (volta a ser produto
-              // sem variação, estoque simples).
-              : []
-            : variants;
-        const removedIdsToSend =
-          colorMode === "single" && simpleSizes.length === 0 && existingSingleVariant
-            ? [...removedVariantIds, existingSingleVariant.id]
-            : removedVariantIds;
-        const variantsResult = await saveVariants({ type: "product", id: product.id, baseSku: sku }, variantsToSave, removedIdsToSend);
-        if (variantsResult.error) { setError(variantsResult.error); return; }
-      }
-
-      if (stockItemChanged && originalStockItemId) {
-        const clearResult = await clearProductColors(product.id);
-        if (clearResult.error) { setError(clearResult.error); return; }
-      }
-
-      if (origin === "linked" && linkedStockItem) {
-        if (colors.length > 0) {
-          const colorsResult = await saveProductColors(
-            product.id,
-            linkedStockItem.id,
-            colors,
-            stockItemChanged ? [] : removedColorIds
-          );
-          if (colorsResult.error) { setError(colorsResult.error); return; }
-        } else if (!stockItemChanged && removedColorIds.length > 0) {
-          // Produto inativo, todas as cores removidas — aplica as remoções
-          // sem exigir o mínimo de 1 cor (que só vale pra produto ativo).
-          const clearResult = await clearProductColors(product.id);
-          if (clearResult.error) { setError(clearResult.error); return; }
-        }
-      }
+      // "Tamanho único" monta 1 variante com cor neutra (nunca exibida)
+      // usando as fotos da "Foto principal" — sem isso, a galeria da PDP
+      // ficaria vazia (ela usa a mídia da variante, não a do produto,
+      // quando há variação). Preserva o dbId da variante única existente
+      // pra não duplicar a cada save.
+      const variantsToSave: VariantInput[] =
+        colorMode === "single"
+          ? simpleSizes.length > 0
+            ? [{
+                dbId: existingSingleVariant?.id,
+                color_name: existingSingleVariant?.color_name || "Padrão",
+                color_hex: existingSingleVariant?.color_hex || "#000000",
+                display_order: 0,
+                is_active: true,
+                // Casa pela URL com a mídia da variante já salva, pra
+                // preservar o dbId — sem isso, TODA imagem era tratada
+                // como nova a cada save, apagando e recriando a mesma
+                // linha (e, por compartilhar o arquivo com a foto
+                // principal, arriscando apagar o arquivo físico também).
+                media: mediaItems
+                  .filter((m) => !m.uploading && !m.uploadError && m.type === "image")
+                  .map((m, i) => {
+                    const existingMedia = existingSingleVariant?.media.find((em) => em.url === m.url);
+                    return {
+                      dbId: existingMedia?.id,
+                      url: m.url,
+                      storagePath: m.storagePath ?? existingMedia?.storage_path,
+                      is_main: i === 0,
+                      is_hover: false,
+                      display_order: i,
+                    };
+                  }),
+                sizes: simpleSizes.map((s) => ({
+                  dbId: s.dbId, size: s.size, stock: s.stock, sku: s.sku, low_stock_alert: 5, is_active: s.is_active,
+                })),
+              }]
+            // Sem tamanho nenhum — se já existia uma variante única, ela é
+            // excluída via removedIdsToSend abaixo (volta a ser produto
+            // sem variação, estoque simples).
+            : []
+          : variants;
+      const removedIdsToSend =
+        colorMode === "single" && simpleSizes.length === 0 && existingSingleVariant
+          ? [...removedVariantIds, existingSingleVariant.id]
+          : removedVariantIds;
+      const variantsResult = await saveVariants(product.id, sku, variantsToSave, removedIdsToSend);
+      if (variantsResult.error) { setError(variantsResult.error); return; }
 
       // Recarrega os dados do servidor (product.media atualizado) e confirma
       // visualmente o sucesso — antes não havia nenhum feedback após salvar,
@@ -737,44 +610,6 @@ export function EditarProdutoForm({ product, categoryTree }: Props) {
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
         <div className="xl:col-span-2 space-y-5">
 
-          <SectionCard title="Origem do produto" hint="De onde vêm cor, tamanho, imagens e estoque deste produto">
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => setOrigin("manual")}
-                className={[
-                  "flex-1 px-4 py-2.5 rounded-xl text-sm font-medium border transition-all",
-                  origin === "manual"
-                    ? "bg-accent/10 border-accent text-accent"
-                    : "bg-dark-alt border-dark-border-light text-muted hover:text-dark-text",
-                ].join(" ")}
-              >
-                Manual
-              </button>
-              <button
-                type="button"
-                onClick={() => setOrigin("linked")}
-                className={[
-                  "flex-1 px-4 py-2.5 rounded-xl text-sm font-medium border transition-all",
-                  origin === "linked"
-                    ? "bg-accent/10 border-accent text-accent"
-                    : "bg-dark-alt border-dark-border-light text-muted hover:text-dark-text",
-                ].join(" ")}
-              >
-                Vinculado a uma peça do estoque
-              </button>
-            </div>
-            {origin === "linked" && (
-              <div className="mt-4">
-                <StockItemLinkPicker
-                  value={linkedStockItem}
-                  excludeProductId={product.id}
-                  onSelect={setLinkedStockItem}
-                />
-              </div>
-            )}
-          </SectionCard>
-
           <SectionCard title="Informações básicas">
             <Input
               label="Nome"
@@ -796,15 +631,11 @@ export function EditarProdutoForm({ product, categoryTree }: Props) {
                   Gerar a partir do nome
                 </button>
               </div>
-              {origin === "linked" ? (
-                <Input label="SKU" value="SKU controlado pelo estoque" disabled />
-              ) : (
-                <Input
-                  label="SKU"
-                  value={sku}
-                  onChange={(e) => setSku(e.target.value)}
-                />
-              )}
+              <Input
+                label="SKU"
+                value={sku}
+                onChange={(e) => setSku(e.target.value)}
+              />
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <Select
@@ -925,90 +756,60 @@ export function EditarProdutoForm({ product, categoryTree }: Props) {
           </SectionCard>
 
           {/* Logo depois da foto principal de propósito — é a continuação
-              direta do mesmo pensamento ("essa é a foto, agora as cores"),
-              em vez de ficar perdida lá embaixo perto de Estoque e entrega. */}
-          {origin === "manual" ? (
-            <SectionCard
-              title={colorMode === "single" ? "Tamanhos e estoque" : "Cores deste mesmo produto"}
-              hint={
-                colorMode === "single"
-                  ? "Adicione os tamanhos vendidos neste produto e defina o estoque individual de cada um. Sem nenhum tamanho aqui, o produto usa o estoque simples abaixo (sem variação)."
-                  : "Nome, descrição e preço já estão definidos acima e valem para todas as cores. Aqui você só adiciona: nome da cor, fotos daquela cor, e os tamanhos com estoque."
-              }
-            >
-              <div className="flex gap-2 mb-1">
-                <button
-                  type="button"
-                  onClick={() => setColorMode("single")}
-                  className={[
-                    "flex-1 px-3 py-2 rounded-xl text-xs font-medium border transition-all",
-                    colorMode === "single"
-                      ? "bg-accent/10 border-accent text-accent"
-                      : "bg-dark-alt border-dark-border-light text-muted hover:text-dark-text",
-                  ].join(" ")}
-                >
-                  Tamanho único
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setColorMode("multi")}
-                  className={[
-                    "flex-1 px-3 py-2 rounded-xl text-xs font-medium border transition-all",
-                    colorMode === "multi"
-                      ? "bg-accent/10 border-accent text-accent"
-                      : "bg-dark-alt border-dark-border-light text-muted hover:text-dark-text",
-                  ].join(" ")}
-                >
-                  Várias cores
-                </button>
-              </div>
-              {colorMode === "single" ? (
-                // key=updated_at — mesmo motivo do MediaUploader/VariantEditor
-                // abaixo: remonta com os dbIds reais depois de cada save.
-                <ProductSizeEditor
-                  key={product.updated_at}
-                  baseSku={sku}
-                  initialSizes={existingSingleVariant?.sizes}
-                  onChange={setSimpleSizes}
-                />
-              ) : (
-                <VariantEditor
-                  key={product.updated_at}
-                  mediaFolderId={product.id}
-                  baseSku={sku}
-                  initialVariants={product.variants}
-                  onChange={(v, removed) => { setVariants(v); setRemovedVariantIds(removed); }}
-                />
-              )}
-            </SectionCard>
-          ) : linkedStockItem ? (
-            <SectionCard
-              title="Cores que aparecerão no site"
-              hint="Escolha quais cores da peça vinculada este produto mostra, em que ordem, e qual é a principal. Tamanho, SKU e quantidade vêm sempre do Estoque — aqui você só ajusta a vitrine."
-            >
-              {colorsLoading ? (
-                <div className="flex items-center justify-center gap-2 py-10 text-muted text-sm">
-                  <Loader2 size={16} className="animate-spin" />
-                  Carregando cores…
-                </div>
-              ) : (
-                <ProductColorCurator
-                  key={linkedStockItem.id}
-                  productId={product.id}
-                  linkedStockItem={linkedStockItem}
-                  initialColors={linkedStockItem.id === originalStockItemId ? initialColors : []}
-                  onChange={(c, removed) => { setColors(c); setRemovedColorIds(removed); }}
-                />
-              )}
-            </SectionCard>
-          ) : (
-            <SectionCard title="Cores que aparecerão no site">
-              <p className="text-sm text-muted">
-                Selecione uma peça do estoque na seção &quot;Origem do produto&quot;, no topo desta página, para escolher
-                quais cores este produto vai mostrar.
-              </p>
-            </SectionCard>
-          )}
+              direta do mesmo pensamento ("essa é a foto, agora as cores"). */}
+          <SectionCard
+            title={colorMode === "single" ? "Tamanhos e estoque" : "Cores e tamanhos"}
+            hint={
+              colorMode === "single"
+                ? "Defina os tamanhos disponíveis e a quantidade individual de cada variação. Sem nenhum tamanho aqui, o produto usa o estoque simples abaixo (sem variação)."
+                : "Nome, descrição e preço já estão definidos acima e valem para todas as cores. Aqui você adiciona: nome da cor, fotos daquela cor, e os tamanhos com estoque individual de cada combinação."
+            }
+          >
+            <div className="flex gap-2 mb-1">
+              <button
+                type="button"
+                onClick={() => setColorMode("single")}
+                className={[
+                  "flex-1 px-3 py-2 rounded-xl text-xs font-medium border transition-all",
+                  colorMode === "single"
+                    ? "bg-accent/10 border-accent text-accent"
+                    : "bg-dark-alt border-dark-border-light text-muted hover:text-dark-text",
+                ].join(" ")}
+              >
+                Tamanho único
+              </button>
+              <button
+                type="button"
+                onClick={() => setColorMode("multi")}
+                className={[
+                  "flex-1 px-3 py-2 rounded-xl text-xs font-medium border transition-all",
+                  colorMode === "multi"
+                    ? "bg-accent/10 border-accent text-accent"
+                    : "bg-dark-alt border-dark-border-light text-muted hover:text-dark-text",
+                ].join(" ")}
+              >
+                Várias cores
+              </button>
+            </div>
+            {colorMode === "single" ? (
+              // key=updated_at — mesmo motivo do MediaUploader/VariantEditor
+              // abaixo: remonta com os dbIds reais depois de cada save.
+              <ProductSizeEditor
+                key={product.updated_at}
+                baseSku={sku}
+                initialSizes={existingSingleVariant?.sizes}
+                onChange={setSimpleSizes}
+              />
+            ) : (
+              <VariantEditor
+                key={product.updated_at}
+                mediaFolderId={product.id}
+                baseSku={sku}
+                initialVariants={product.variants}
+                onChange={(v, removed) => { setVariants(v); setRemovedVariantIds(removed); }}
+              />
+            )}
+          </SectionCard>
 
           <SectionCard title="Selo do produto">
             <HelpText text="Imagem opcional (ex: promoção, lançamento, selo próprio) posicionada livremente sobre o card, exatamente como aparece no site." />
@@ -1028,21 +829,6 @@ export function EditarProdutoForm({ product, categoryTree }: Props) {
                 onChange={(e) => setSpecComposicao(e.target.value)}
                 placeholder="Ex: 100% algodão penteado"
               />
-              {origin === "linked" ? (
-                <Input
-                  label="Tamanhos disponíveis"
-                  value={linkedSizesLabel || "—"}
-                  disabled
-                  helper="Vem da peça vinculada"
-                />
-              ) : (
-                <Input
-                  label="Tamanhos disponíveis"
-                  value={specVolume}
-                  onChange={(e) => setSpecVolume(e.target.value)}
-                  placeholder="Ex: P, M, G, GG"
-                />
-              )}
               <Input
                 label="Modelagem"
                 value={specAplicacoes}
@@ -1064,13 +850,9 @@ export function EditarProdutoForm({ product, categoryTree }: Props) {
               <div className="rounded-xl border border-dark-border-light bg-dark-alt/40 p-3">
                 <p className="text-xs font-medium text-dark-text">Estoque controlado por tamanho</p>
                 <p className="text-xs text-muted mt-1">
-                  {origin === "linked"
-                    ? "Vem da peça vinculada (seção \"Cores que aparecerão no site\" acima) — edite cor/tamanho/quantidade em Estoque."
-                    : `Definido na seção "${colorMode === "single" ? "Tamanhos e estoque" : "Cores deste mesmo produto"}" acima — os campos abaixo não se aplicam.`}
+                  {`Definido na seção "${colorMode === "single" ? "Tamanhos e estoque" : "Cores e tamanhos"}" acima — os campos abaixo não se aplicam.`}
                 </p>
-                {origin === "manual" && (
-                  <p className="text-sm text-accent font-semibold mt-2">Total: {manualStockTotal} unidades</p>
-                )}
+                <p className="text-sm text-accent font-semibold mt-2">Total: {manualStockTotal} unidades</p>
               </div>
             ) : (
               <div>
@@ -1159,12 +941,8 @@ export function EditarProdutoForm({ product, categoryTree }: Props) {
             category_name={selectedCat?.label}
             media={previewMedia}
             sku={sku}
-            track_stock={origin === "manual" && hasVariants ? true : trackStock}
-            stock={
-              origin === "manual" && hasVariants
-                ? manualStockTotal
-                : trackStock ? (parseInt(stock) || 0) : null
-            }
+            track_stock={hasVariants ? true : trackStock}
+            stock={hasVariants ? manualStockTotal : trackStock ? (parseInt(stock) || 0) : null}
           />
         </div>
       </div>

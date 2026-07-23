@@ -18,7 +18,6 @@ import {
   Image,
   Smartphone,
   MessageSquareQuote,
-  Boxes,
 } from "lucide-react";
 import { routes } from "@/lib/routes";
 import { logoutAdmin } from "@/lib/actions/auth";
@@ -35,7 +34,6 @@ const NAV_GROUPS = [
     label: "Catálogo",
     items: [
       { label: "Produtos", href: routes.admin.produtos, icon: Package },
-      { label: "Estoque", href: routes.admin.estoque, icon: Boxes },
       { label: "Categorias", href: routes.admin.categorias, icon: Grid3x3 },
       { label: "Cupons", href: routes.admin.cupons, icon: Tag },
       { label: "Banners", href: routes.admin.banners, icon: Image },

@@ -14,12 +14,9 @@ import { PriceTierEditor } from "@/components/admin/PriceTierEditor";
 import { ProductBadgeEditor } from "@/components/admin/ProductBadgeEditor";
 import { VariantEditor } from "@/components/admin/VariantEditor";
 import { ProductSizeEditor } from "@/components/admin/ProductSizeEditor";
-import { StockItemLinkPicker } from "@/components/admin/StockItemLinkPicker";
-import { ProductColorCurator } from "@/components/admin/ProductColorCurator";
 import { createProduct, copyProductImagesForDraft } from "@/lib/actions/products";
 import { saveMediaChanges } from "@/lib/actions/media";
 import { saveVariants } from "@/lib/actions/variants";
-import { saveProductColors } from "@/lib/actions/product-colors";
 import { routes } from "@/lib/routes";
 import { slugify } from "@/lib/formatters";
 import type { ProductFormData, ProductDuplicationData } from "@/lib/actions/products";
@@ -27,10 +24,9 @@ import type { UploadedMedia } from "@/components/admin/MediaUploader";
 import type { ProductBadgeValue } from "@/components/admin/ProductBadgeEditor";
 import type { VariantInput } from "@/lib/actions/variants";
 import type { SimpleSizeInput } from "@/components/admin/ProductSizeEditor";
-import type { ProductColorInput } from "@/lib/actions/product-colors";
-import type { PriceTier, ProductSpecification, ProductMedia, ProductAvailability, Product, StockItem } from "@/types";
+import type { PriceTier, ProductSpecification, ProductMedia, ProductAvailability, Product } from "@/types";
 
-const SPEC_LABELS = ["Tecido", "Tamanhos disponíveis", "Modelagem", "Cuidados de lavagem"] as const;
+const SPEC_LABELS = ["Tecido", "Modelagem", "Cuidados de lavagem"] as const;
 
 interface CategoryOption {
   value: string;
@@ -131,11 +127,6 @@ export function NovoProdutoForm({ categoryTree, duplicateFrom, duplicateFromId }
 
   const dupName = duplicateFrom ? `${duplicateFrom.name} (Cópia)` : "";
 
-  // Origem do produto: manual (como sempre foi) ou vinculado a uma peça já
-  // cadastrada em Estoque — nesse caso cor/tamanho/imagem/SKU vêm da peça.
-  const [origin, setOrigin] = useState<"manual" | "linked">("manual");
-  const [linkedStockItem, setLinkedStockItem] = useState<StockItem | null>(null);
-
   const [name, setName] = useState(dupName);
   const [slug, setSlug] = useState(dupName ? slugify(dupName) : "");
   const [sku, setSku] = useState("");
@@ -164,7 +155,6 @@ export function NovoProdutoForm({ categoryTree, duplicateFrom, duplicateFromId }
   const [priceTiers, setPriceTiers] = useState<PriceTier[]>(duplicateFrom?.price_tiers ?? []);
   const dupSpecs = new Map((duplicateFrom?.specifications ?? []).map((s) => [s.label, s.value]));
   const [specComposicao, setSpecComposicao] = useState(dupSpecs.get("Tecido") ?? "");
-  const [specVolume, setSpecVolume] = useState(dupSpecs.get("Tamanhos disponíveis") ?? "");
   const [specAplicacoes, setSpecAplicacoes] = useState(dupSpecs.get("Modelagem") ?? "");
   const [specConservacao, setSpecConservacao] = useState(dupSpecs.get("Cuidados de lavagem") ?? "");
   const [weight, setWeight] = useState(duplicateFrom ? String(duplicateFrom.weight_kg) : "0.1");
@@ -183,11 +173,8 @@ export function NovoProdutoForm({ categoryTree, duplicateFrom, duplicateFromId }
   const [simpleSizes, setSimpleSizes] = useState<SimpleSizeInput[]>([]);
   const [variants, setVariants] = useState<VariantInput[]>([]);
   const [removedVariantIds, setRemovedVariantIds] = useState<string[]>([]);
-  const [colors, setColors] = useState<ProductColorInput[]>([]);
-  const [removedColorIds, setRemovedColorIds] = useState<string[]>([]);
   const manualSizes = colorMode === "single" ? simpleSizes : variants.flatMap((v) => v.sizes);
-  const hasVariants =
-    origin === "linked" ? (linkedStockItem?.variants.length ?? 0) > 0 : manualSizes.length > 0;
+  const hasVariants = manualSizes.length > 0;
   const manualStockTotal = manualSizes.reduce((sum, s) => sum + (Number(s.stock) || 0), 0);
 
   // Selo nunca é copiado ao duplicar — começa sempre vazio, propositalmente
@@ -209,27 +196,13 @@ export function NovoProdutoForm({ categoryTree, duplicateFrom, duplicateFromId }
     setCategoryId(dept && dept.children.length === 0 ? id : "");
   };
 
-  // Vinculado, o preview usa as imagens da cor principal escolhida na
-  // curadoria — não o uploader "Foto principal" (que nesse modo é só capa
-  // de reserva, conforme o hint da seção abaixo). Sem cor principal ainda,
-  // cai no uploader normal.
-  const mainColorImages = colors.find((c) => c.is_main)?.images;
-  const previewMedia =
-    origin === "linked" && mainColorImages && mainColorImages.length > 0
-      ? mainColorImages.slice().sort((a, b) => a.display_order - b.display_order).map((img) => ({ url: img.url, type: "image" as const }))
-      : mediaItems.filter((m) => !m.uploading && !m.uploadError).map((m) => ({ url: m.url, type: m.type }));
-
-  // Vinculado a uma peça, os tamanhos já são conhecidos (vêm do estoque) —
-  // não faz sentido pedir pro admin digitar de novo algo que já existe.
-  const linkedSizesLabel =
-    origin === "linked" && linkedStockItem
-      ? Array.from(new Set(linkedStockItem.variants.flatMap((v) => v.sizes.map((s) => s.size)))).join(", ")
-      : "";
-  const effectiveSpecVolume = origin === "linked" ? linkedSizesLabel : specVolume;
+  const previewMedia = mediaItems
+    .filter((m) => !m.uploading && !m.uploadError)
+    .map((m) => ({ url: m.url, type: m.type }));
 
   const specifications: ProductSpecification[] = SPEC_LABELS.map((label, i) => ({
     label,
-    value: [specComposicao, effectiveSpecVolume, specAplicacoes, specConservacao][i],
+    value: [specComposicao, specAplicacoes, specConservacao][i],
   }));
 
   // Produto "ao vivo" a partir do estado atual, SEM badge — usado apenas
@@ -296,8 +269,7 @@ export function NovoProdutoForm({ categoryTree, duplicateFrom, duplicateFromId }
   ): ProductFormData => ({
     name,
     slug,
-    sku: origin === "linked" ? (linkedStockItem?.base_sku ?? "") : sku,
-    stock_item_id:       origin === "linked" ? (linkedStockItem?.id ?? null) : null,
+    sku,
     category_id:         categoryId,
     price_pix:           parseFloat(pricePix)  || 0,
     price_card:          parseFloat(priceCard) || 0,
@@ -331,21 +303,12 @@ export function NovoProdutoForm({ categoryTree, duplicateFrom, duplicateFromId }
   const handleSave = (publish: boolean) => {
     setError(null);
 
-    if (origin === "linked" && !linkedStockItem) {
-      setError("Selecione uma peça do estoque para vincular, ou troque para \"Manual\".");
-      return;
-    }
-    if (origin === "linked" && publish && colors.length < 1) {
-      setError("Adicione pelo menos uma cor da peça vinculada antes de publicar.");
-      return;
-    }
-
     // "Tamanho único" usa a "Foto principal" como imagem da variante única
     // (sem pedir upload separado) — por isso sempre exige foto nesse modo,
     // igual ao produto sem variação nenhuma. "Várias cores" já tem suas
     // próprias fotos por cor, então a foto principal vira opcional ali.
     const imageCount = mediaItems.filter((m) => m.type === "image" && !m.uploadError).length;
-    const needsTopImage = origin === "manual" && (colorMode === "single" || !hasVariants);
+    const needsTopImage = colorMode === "single" || !hasVariants;
     if (needsTopImage && imageCount < 1) {
       setError("Adicione pelo menos 1 imagem do produto.");
       return;
@@ -365,45 +328,31 @@ export function NovoProdutoForm({ categoryTree, duplicateFrom, duplicateFromId }
         setError(mediaResult.error);
         return;
       }
-      // Salva as cores/tamanhos — só no modo manual. Vinculado a uma peça, as
-      // variações já existem em Estoque. "Tamanho único" monta 1 variante com
-      // cor neutra (nunca exibida) usando as fotos da "Foto principal" — sem
-      // isso, a galeria da PDP ficaria vazia (ela usa a mídia da variante,
-      // não a do produto, quando há variação).
-      if (origin === "manual") {
-        const variantsToSave: VariantInput[] =
-          colorMode === "single"
-            ? simpleSizes.length > 0
-              ? [{
-                  color_name: "Padrão",
-                  color_hex: "#000000",
-                  display_order: 0,
-                  is_active: true,
-                  media: mediaItems
-                    .filter((m) => !m.uploading && !m.uploadError && m.type === "image")
-                    .map((m, i) => ({ url: m.url, storagePath: m.storagePath, is_main: i === 0, is_hover: false, display_order: i })),
-                  sizes: simpleSizes.map((s) => ({
-                    size: s.size, stock: s.stock, sku: s.sku, low_stock_alert: 5, is_active: s.is_active,
-                  })),
-                }]
-              : []
-            : variants;
-        const variantsResult = await saveVariants({ type: "product", id: productId, baseSku: sku }, variantsToSave, removedVariantIds);
-        if (variantsResult.error) {
-          setError(variantsResult.error);
-          return;
-        }
-      }
-      // Salva a curadoria de cores (quais cores da peça aparecem, ordem,
-      // principal, imagens por cor) — só no modo vinculado, e só se houver
-      // ao menos uma cor (rascunho pode ficar sem nenhuma; publicar já
-      // bloqueou isso acima).
-      if (origin === "linked" && linkedStockItem && colors.length > 0) {
-        const colorsResult = await saveProductColors(productId, linkedStockItem.id, colors, removedColorIds);
-        if (colorsResult.error) {
-          setError(colorsResult.error);
-          return;
-        }
+      // Salva cores/tamanhos. "Tamanho único" monta 1 variante com cor neutra
+      // (nunca exibida) usando as fotos da "Foto principal" — sem isso, a
+      // galeria da PDP ficaria vazia (ela usa a mídia da variante, não a do
+      // produto, quando há variação).
+      const variantsToSave: VariantInput[] =
+        colorMode === "single"
+          ? simpleSizes.length > 0
+            ? [{
+                color_name: "Padrão",
+                color_hex: "#000000",
+                display_order: 0,
+                is_active: true,
+                media: mediaItems
+                  .filter((m) => !m.uploading && !m.uploadError && m.type === "image")
+                  .map((m, i) => ({ url: m.url, storagePath: m.storagePath, is_main: i === 0, is_hover: false, display_order: i })),
+                sizes: simpleSizes.map((s) => ({
+                  size: s.size, stock: s.stock, sku: s.sku, low_stock_alert: 5, is_active: s.is_active,
+                })),
+              }]
+            : []
+          : variants;
+      const variantsResult = await saveVariants(productId, sku, variantsToSave, removedVariantIds);
+      if (variantsResult.error) {
+        setError(variantsResult.error);
+        return;
       }
       router.push(routes.admin.produtos);
     });
@@ -489,40 +438,6 @@ export function NovoProdutoForm({ categoryTree, duplicateFrom, duplicateFromId }
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
         {/* Coluna principal */}
         <div className="xl:col-span-2 space-y-5">
-          <SectionCard title="Origem do produto" hint="De onde vêm cor, tamanho, imagens e estoque deste produto">
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => setOrigin("manual")}
-                className={[
-                  "flex-1 px-4 py-2.5 rounded-xl text-sm font-medium border transition-all",
-                  origin === "manual"
-                    ? "bg-accent/10 border-accent text-accent"
-                    : "bg-dark-alt border-dark-border-light text-muted hover:text-dark-text",
-                ].join(" ")}
-              >
-                Manual
-              </button>
-              <button
-                type="button"
-                onClick={() => setOrigin("linked")}
-                className={[
-                  "flex-1 px-4 py-2.5 rounded-xl text-sm font-medium border transition-all",
-                  origin === "linked"
-                    ? "bg-accent/10 border-accent text-accent"
-                    : "bg-dark-alt border-dark-border-light text-muted hover:text-dark-text",
-                ].join(" ")}
-              >
-                Vinculado a uma peça do estoque
-              </button>
-            </div>
-            {origin === "linked" && (
-              <div className="mt-4">
-                <StockItemLinkPicker value={linkedStockItem} onSelect={setLinkedStockItem} />
-              </div>
-            )}
-          </SectionCard>
-
           <SectionCard title="Informações básicas" hint="Nome e identificadores do produto">
             <Input
               label="Nome do produto"
@@ -540,16 +455,12 @@ export function NovoProdutoForm({ categoryTree, duplicateFrom, duplicateFromId }
                 onChange={(e) => setSlug(slugify(e.target.value))}
                 placeholder="camiseta-basica-masculina-preta"
               />
-              {origin === "linked" ? (
-                <Input label="SKU" value="SKU controlado pelo estoque" disabled />
-              ) : (
-                <Input
-                  label="SKU"
-                  value={sku}
-                  onChange={(e) => setSku(e.target.value)}
-                  placeholder="TRZ-5MG-001"
-                />
-              )}
+              <Input
+                label="SKU"
+                value={sku}
+                onChange={(e) => setSku(e.target.value)}
+                placeholder="TRZ-5MG-001"
+              />
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <Select
@@ -681,70 +592,50 @@ export function NovoProdutoForm({ categoryTree, duplicateFrom, duplicateFromId }
           {/* Logo depois da foto principal de propósito — é a continuação
               direta do mesmo pensamento ("essa é a foto, agora as cores"),
               em vez de ficar perdida lá embaixo perto de Estoque e entrega. */}
-          {origin === "manual" ? (
-            <SectionCard
-              title={colorMode === "single" ? "Tamanhos e estoque" : "Cores deste mesmo produto"}
-              hint={
-                colorMode === "single"
-                  ? "Adicione os tamanhos vendidos neste produto e defina o estoque individual de cada um. Sem nenhum tamanho aqui, o produto usa o estoque simples abaixo (sem variação)."
-                  : "Nome, descrição e preço já estão definidos acima e valem para todas as cores. Aqui você só adiciona: nome da cor, fotos daquela cor, e os tamanhos com estoque."
-              }
-            >
-              <div className="flex gap-2 mb-1">
-                <button
-                  type="button"
-                  onClick={() => setColorMode("single")}
-                  className={[
-                    "flex-1 px-3 py-2 rounded-xl text-xs font-medium border transition-all",
-                    colorMode === "single"
-                      ? "bg-accent/10 border-accent text-accent"
-                      : "bg-dark-alt border-dark-border-light text-muted hover:text-dark-text",
-                  ].join(" ")}
-                >
-                  Tamanho único
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setColorMode("multi")}
-                  className={[
-                    "flex-1 px-3 py-2 rounded-xl text-xs font-medium border transition-all",
-                    colorMode === "multi"
-                      ? "bg-accent/10 border-accent text-accent"
-                      : "bg-dark-alt border-dark-border-light text-muted hover:text-dark-text",
-                  ].join(" ")}
-                >
-                  Várias cores
-                </button>
-              </div>
-              {colorMode === "single" ? (
-                <ProductSizeEditor baseSku={sku} onChange={setSimpleSizes} />
-              ) : (
-                <VariantEditor
-                  mediaFolderId={productId}
-                  baseSku={sku}
-                  onChange={(v, removed) => { setVariants(v); setRemovedVariantIds(removed); }}
-                />
-              )}
-            </SectionCard>
-          ) : linkedStockItem ? (
-            <SectionCard
-              title="Cores que aparecerão no site"
-              hint="Escolha quais cores da peça vinculada este produto mostra, em que ordem, e qual é a principal. Tamanho, SKU e quantidade vêm sempre do Estoque — aqui você só ajusta a vitrine."
-            >
-              <ProductColorCurator
-                productId={productId}
-                linkedStockItem={linkedStockItem}
-                onChange={(c, removed) => { setColors(c); setRemovedColorIds(removed); }}
+          <SectionCard
+            title={colorMode === "single" ? "Tamanhos e estoque" : "Cores e tamanhos"}
+            hint={
+              colorMode === "single"
+                ? "Defina os tamanhos disponíveis e a quantidade individual de cada variação. Sem nenhum tamanho aqui, o produto usa o estoque simples abaixo (sem variação)."
+                : "Nome, descrição e preço já estão definidos acima e valem para todas as cores. Aqui você adiciona: nome da cor, fotos daquela cor, e os tamanhos com estoque individual de cada combinação."
+            }
+          >
+            <div className="flex gap-2 mb-1">
+              <button
+                type="button"
+                onClick={() => setColorMode("single")}
+                className={[
+                  "flex-1 px-3 py-2 rounded-xl text-xs font-medium border transition-all",
+                  colorMode === "single"
+                    ? "bg-accent/10 border-accent text-accent"
+                    : "bg-dark-alt border-dark-border-light text-muted hover:text-dark-text",
+                ].join(" ")}
+              >
+                Tamanho único
+              </button>
+              <button
+                type="button"
+                onClick={() => setColorMode("multi")}
+                className={[
+                  "flex-1 px-3 py-2 rounded-xl text-xs font-medium border transition-all",
+                  colorMode === "multi"
+                    ? "bg-accent/10 border-accent text-accent"
+                    : "bg-dark-alt border-dark-border-light text-muted hover:text-dark-text",
+                ].join(" ")}
+              >
+                Várias cores
+              </button>
+            </div>
+            {colorMode === "single" ? (
+              <ProductSizeEditor baseSku={sku} onChange={setSimpleSizes} />
+            ) : (
+              <VariantEditor
+                mediaFolderId={productId}
+                baseSku={sku}
+                onChange={(v, removed) => { setVariants(v); setRemovedVariantIds(removed); }}
               />
-            </SectionCard>
-          ) : (
-            <SectionCard title="Cores que aparecerão no site">
-              <p className="text-sm text-muted">
-                Selecione uma peça do estoque na seção &quot;Origem do produto&quot;, no topo desta página, para escolher
-                quais cores este produto vai mostrar.
-              </p>
-            </SectionCard>
-          )}
+            )}
+          </SectionCard>
 
           <SectionCard title="Selo do produto" hint="Imagem opcional posicionada livremente sobre o card, exatamente como aparece no site">
             <ProductBadgeEditor
@@ -763,21 +654,6 @@ export function NovoProdutoForm({ categoryTree, duplicateFrom, duplicateFromId }
                 onChange={(e) => setSpecComposicao(e.target.value)}
                 placeholder="Ex: 100% algodão penteado"
               />
-              {origin === "linked" ? (
-                <Input
-                  label="Tamanhos disponíveis"
-                  value={linkedSizesLabel || "—"}
-                  disabled
-                  helper="Vem da peça vinculada"
-                />
-              ) : (
-                <Input
-                  label="Tamanhos disponíveis"
-                  value={specVolume}
-                  onChange={(e) => setSpecVolume(e.target.value)}
-                  placeholder="Ex: P, M, G, GG"
-                />
-              )}
               <Input
                 label="Modelagem"
                 value={specAplicacoes}
@@ -799,13 +675,9 @@ export function NovoProdutoForm({ categoryTree, duplicateFrom, duplicateFromId }
               <div className="rounded-xl border border-dark-border-light bg-dark-alt/40 p-3">
                 <p className="text-xs font-medium text-dark-text">Estoque controlado por tamanho</p>
                 <p className="text-xs text-muted mt-1">
-                  {origin === "linked"
-                    ? "Vem da peça vinculada (seção \"Cores que aparecerão no site\" acima) — os campos abaixo não se aplicam."
-                    : `Definido na seção "${colorMode === "single" ? "Tamanhos e estoque" : "Cores deste mesmo produto"}" acima — os campos abaixo não se aplicam.`}
+                  {`Definido na seção "${colorMode === "single" ? "Tamanhos e estoque" : "Cores e tamanhos"}" acima — os campos abaixo não se aplicam.`}
                 </p>
-                {origin === "manual" && (
-                  <p className="text-sm text-accent font-semibold mt-2">Total: {manualStockTotal} unidades</p>
-                )}
+                <p className="text-sm text-accent font-semibold mt-2">Total: {manualStockTotal} unidades</p>
               </div>
             ) : (
               <div>
@@ -901,12 +773,8 @@ export function NovoProdutoForm({ categoryTree, duplicateFrom, duplicateFromId }
               category_name={selectedCat?.label}
               media={previewMedia}
               sku={sku || undefined}
-              track_stock={origin === "manual" && hasVariants ? true : trackStock}
-              stock={
-                origin === "manual" && hasVariants
-                  ? manualStockTotal
-                  : trackStock ? (parseInt(stock) || 0) : null
-              }
+              track_stock={hasVariants ? true : trackStock}
+              stock={hasVariants ? manualStockTotal : trackStock ? (parseInt(stock) || 0) : null}
             />
           </div>
         </div>

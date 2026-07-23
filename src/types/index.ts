@@ -78,66 +78,13 @@ export interface ProductVariantSize {
 
 export interface ProductVariant {
   id: string;
-  // Dono da variante — OU um produto direto (modo legado/manual) OU uma
-  // peça de estoque reutilizável (stock_item_id). Nunca os dois.
-  product_id?: string;
-  stock_item_id?: string;
+  product_id: string;
   color_name: string;
   color_hex: string;
   display_order: number;
   is_active: boolean;
   media: ProductVariantMedia[];
   sizes: ProductVariantSize[];
-  created_at: string;
-  updated_at: string;
-}
-
-// =============================================
-// CURADORIA DE CORES — quais cores de uma peça do estoque aparecem em um
-// produto vinculado, em que ordem, qual é a principal, e imagens próprias
-// do produto por cor (cópia da imagem do estoque + ajustes, nunca duplica
-// tamanho/SKU/quantidade). Usado só pelo Admin — não substitui
-// ProductVariant/ProductVariantMedia, que continuam sendo o formato lido
-// pela loja pública (ver attachStockItemVariants).
-// =============================================
-
-export interface ProductColorImage {
-  id: string;
-  product_color_id: string;
-  url: string;
-  storage_path?: string;
-  source: "stock" | "upload";
-  stock_media_id?: string;
-  is_primary: boolean;
-  is_hover: boolean;
-  display_order: number;
-  created_at: string;
-}
-
-export interface ProductColor {
-  id: string;
-  product_id: string;
-  variant_id: string;
-  display_order: number;
-  is_main: boolean;
-  images: ProductColorImage[];
-  created_at: string;
-  updated_at: string;
-}
-
-// =============================================
-// ESTOQUE — peça reutilizável (cor → tamanho/SKU/quantidade)
-// =============================================
-
-export interface StockItem {
-  id: string;
-  name: string;
-  base_sku: string;
-  category_id?: string;
-  is_active: boolean;
-  variants: ProductVariant[];
-  // Produto comercial vinculado a esta peça, se houver (1 peça = 1 produto)
-  linked_product?: { id: string; name: string; slug: string };
   created_at: string;
   updated_at: string;
 }
@@ -218,10 +165,6 @@ export interface Product {
   // Variações de cor/tamanho — quando presente e não-vazio, o produto usa
   // estoque por variação em vez do estoque flat abaixo (stock/track_stock).
   variants?: ProductVariant[];
-
-  // Quando preenchido, as variações acima vêm de uma peça do estoque
-  // reutilizável (stock_items), não de product_variants.product_id direto.
-  stock_item_id?: string;
 
   // Selo/badge customizado — imagem livre sobre o card (posição/tamanho em %)
   badge_image_url?: string;

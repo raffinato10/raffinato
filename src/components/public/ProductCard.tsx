@@ -3,10 +3,9 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { ShoppingBag } from "lucide-react";
+import { ShoppingBag, ArrowRight } from "lucide-react";
 import type { Product, ProductVariant } from "@/types";
 import { Badge } from "@/components/common/Badge";
-import { Button } from "@/components/common/Button";
 import { formatCurrency } from "@/lib/formatters";
 import { routes } from "@/lib/routes";
 import { useCartStore } from "@/store/cart-store";
@@ -37,7 +36,6 @@ export const ProductCard = ({ product, showCategory = false }: ProductCardProps)
     product.promotional_active &&
     !!product.price_promotional &&
     product.price_promotional > pixPrice;
-  const pixSavings = product.price_card - pixPrice;
 
   const handleAddToCart = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -65,10 +63,11 @@ export const ProductCard = ({ product, showCategory = false }: ProductCardProps)
       href={routes.produto(product.slug)}
       onMouseEnter={() => setIsHovering(true)}
       onMouseLeave={() => setIsHovering(false)}
-      className="group relative flex flex-col bg-dark-surface border border-dark-border rounded-md overflow-hidden
+      className="group relative flex flex-col bg-dark-surface border border-dark-border rounded-xl overflow-hidden
         transition-all duration-300 ease-out
-        hover:border-accent/30 hover:-translate-y-2
-        hover:shadow-[0_28px_72px_rgba(0,0,0,0.6),_0_0_0_1px_rgba(201,168,76,0.1)]"
+        hover:border-accent/30 hover:-translate-y-1.5
+        hover:shadow-[0_24px_64px_rgba(0,0,0,0.55),_0_0_0_1px_rgba(201,168,76,0.1)]
+        focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-dark-bg"
     >
       {/* Topo com brilho dourado sutil no hover */}
       <div className="absolute top-0 left-8 right-8 h-px bg-gradient-to-r from-transparent via-accent/0 to-transparent group-hover:via-accent/40 transition-all duration-500 z-10" />
@@ -94,7 +93,6 @@ export const ProductCard = ({ product, showCategory = false }: ProductCardProps)
             alt={mainImage?.alt_text || product.name}
             fill
             className="object-cover group-hover:scale-107 transition-transform duration-700 ease-out"
-            unoptimized
           />
         ) : (
           <div className="absolute inset-0 flex flex-col items-center justify-center text-muted gap-3">
@@ -163,10 +161,11 @@ export const ProductCard = ({ product, showCategory = false }: ProductCardProps)
         )}
       </div>
 
-      {/* Content */}
-      <div className="flex flex-col flex-1 p-5 gap-3">
+      {/* Content — sem descrição na frente do card: nome, preço, parcelamento
+          e ação de carrinho compacta, para dar mais respiro à imagem */}
+      <div className="flex flex-col flex-1 p-4 sm:p-5 gap-2">
         {showCategory && product.category && (
-          <span className="text-[11px] text-accent/70 font-bold uppercase tracking-widest">
+          <span className="text-[10px] text-accent/70 font-bold uppercase tracking-widest">
             {product.category.name}
           </span>
         )}
@@ -175,53 +174,58 @@ export const ProductCard = ({ product, showCategory = false }: ProductCardProps)
           {product.name}
         </h3>
 
-        {product.short_description && (
-          <p className="text-xs text-muted/80 line-clamp-1 leading-relaxed">{product.short_description}</p>
-        )}
-
         {/* Divisor sutil */}
-        <div className="h-px bg-dark-border/60 my-1" />
+        <div className="h-px bg-dark-border/60 my-0.5" />
 
-        {/* Prices — hierarquia clara */}
-        <div className="space-y-1">
-          {hasDiscount && (
-            <span className="text-xs text-muted line-through">
-              de {formatCurrency(product.price_promotional!)}
-            </span>
-          )}
-          <div className="flex items-baseline gap-1.5">
-            <span className="text-xl font-bold text-accent tracking-tight">
-              {formatCurrency(pixPrice)}
-            </span>
-            <span className="text-xs text-muted font-medium">no Pix</span>
-          </div>
-          {pixSavings > 0 && (
-            <p className="text-[11px] text-success font-semibold">
-              ▲ Economize {formatCurrency(pixSavings)} no Pix
+        {/* Preço + ação — lado a lado, respiro maior, botão compacto */}
+        <div className="flex items-end justify-between gap-3 mt-auto pt-1">
+          <div className="space-y-0.5 min-w-0">
+            {hasDiscount && (
+              <span className="block text-[11px] text-muted line-through">
+                de {formatCurrency(product.price_promotional!)}
+              </span>
+            )}
+            <div className="flex items-baseline gap-1.5">
+              <span className="text-lg font-bold text-accent tracking-tight">
+                {formatCurrency(pixPrice)}
+              </span>
+              <span className="text-[10px] text-muted font-medium">no Pix</span>
+            </div>
+            <p className="text-[11px] text-muted/70">
+              ou {formatCurrency(product.price_card)} no cartão
             </p>
-          )}
-          <p className="text-xs text-muted/70">
-            ou {formatCurrency(product.price_card)} no cartão
-          </p>
-        </div>
+          </div>
 
-        {/* CTA — produtos com variação não têm compra direta no card, já que
-            cor e tamanho precisam ser escolhidos na página do produto */}
-        {!hasVariants && (
-          <Button
-            variant="accent"
-            size="sm"
-            fullWidth
-            onClick={handleAddToCart}
-            disabled={product.availability === "out_of_stock"}
-            leftIcon={<ShoppingBag size={13} />}
-            className="mt-1 shadow-[0_4px_16px_rgba(201,168,76,0.25)] hover:shadow-[0_6px_24px_rgba(201,168,76,0.4)]"
-          >
-            {product.availability === "out_of_stock"
-              ? "Indisponível"
-              : "Adicionar ao carrinho"}
-          </Button>
-        )}
+          {/* CTA — produtos com variação não têm compra direta no card, já
+              que cor e tamanho precisam ser escolhidos na página do produto;
+              o card inteiro já leva para lá, então mostramos só uma seta. */}
+          {!hasVariants ? (
+            <button
+              type="button"
+              onClick={handleAddToCart}
+              disabled={product.availability === "out_of_stock"}
+              aria-label={
+                product.availability === "out_of_stock"
+                  ? "Produto indisponível"
+                  : `Adicionar ${product.name} ao carrinho`
+              }
+              className="flex-shrink-0 flex items-center justify-center w-10 h-10 rounded-lg bg-accent text-dark-bg
+                hover:bg-accent-light active:scale-95 disabled:opacity-40 disabled:pointer-events-none
+                transition-all duration-200 shadow-[0_4px_16px_rgba(201,168,76,0.25)] hover:shadow-[0_6px_20px_rgba(201,168,76,0.4)]
+                focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-dark-surface"
+            >
+              <ShoppingBag size={16} />
+            </button>
+          ) : (
+            <span
+              aria-hidden="true"
+              className="flex-shrink-0 flex items-center justify-center w-10 h-10 rounded-lg border border-dark-border-light text-muted
+                group-hover:text-accent group-hover:border-accent/40 transition-colors duration-200"
+            >
+              <ArrowRight size={16} />
+            </span>
+          )}
+        </div>
       </div>
     </Link>
   );

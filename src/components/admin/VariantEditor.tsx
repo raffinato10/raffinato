@@ -397,11 +397,11 @@ function VariantImageUploader({
 // ---------------------------------------------------------------------------
 
 interface Props {
-  // Pasta no Storage onde as fotos de cada cor são salvas (productId ou
-  // stock_item_id — só usado como prefixo do caminho, sem efeito no banco).
+  // Pasta no Storage onde as fotos de cada cor são salvas (productId — só
+  // usado como prefixo do caminho, sem efeito no banco).
   mediaFolderId: string;
-  // SKU base do dono (produto ou peça) — usado pra sugerir o SKU automático
-  // de cada tamanho (ex: "CAM-BAS" + cor + tamanho = "CAM-BAS-PRE-M").
+  // SKU base do produto — usado pra sugerir o SKU automático de cada
+  // tamanho (ex: "CAM-BAS" + cor + tamanho = "CAM-BAS-PRE-M").
   baseSku?: string;
   initialVariants?: ProductVariant[];
   onChange: (variants: VariantInput[], removedVariantIds: string[]) => void;

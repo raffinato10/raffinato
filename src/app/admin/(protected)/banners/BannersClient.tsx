@@ -104,8 +104,7 @@ function SliderControl({
 }
 
 // Área de upload de imagem — clique OU arrastar-e-soltar um arquivo do
-// computador (mesmo padrão de drag-and-drop usado em VariantEditor/
-// ProductColorCurator no Admin).
+// computador (mesmo padrão de drag-and-drop usado em VariantEditor no Admin).
 function UploadArea({
   label, hint, imageUrl, uploading, onFile, onClear,
 }: {

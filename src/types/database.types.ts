@@ -173,7 +173,6 @@ export type Database = {
           badge_position_y:    number;
           badge_width_pct:     number;
           display_order:       number;
-          stock_item_id:       string | null;
           created_at:          string;
           updated_at:          string;
         };
@@ -217,14 +216,12 @@ export type Database = {
           badge_position_y?:   number;
           badge_width_pct?:    number;
           display_order?:      number;
-          stock_item_id?:      string | null;
           created_at?:          string;
           updated_at?:          string;
         };
         Update: Partial<Database["public"]["Tables"]["products"]["Insert"]>;
         Relationships: [
-          { foreignKeyName: "products_category_id_fkey"; columns: ["category_id"]; referencedRelation: "categories"; referencedColumns: ["id"] },
-          { foreignKeyName: "products_stock_item_id_fkey"; columns: ["stock_item_id"]; referencedRelation: "stock_items"; referencedColumns: ["id"] }
+          { foreignKeyName: "products_category_id_fkey"; columns: ["category_id"]; referencedRelation: "categories"; referencedColumns: ["id"] }
         ];
       };
 
@@ -259,37 +256,10 @@ export type Database = {
       };
 
       // -----------------------------------------------------------------------
-      stock_items: {
-        Row: {
-          id:          string;
-          name:        string;
-          base_sku:    string;
-          category_id: string | null;
-          is_active:   boolean;
-          created_at:  string;
-          updated_at:  string;
-        };
-        Insert: {
-          id?:          string;
-          name:         string;
-          base_sku:     string;
-          category_id?: string | null;
-          is_active?:   boolean;
-          created_at?:  string;
-          updated_at?:  string;
-        };
-        Update: Partial<Database["public"]["Tables"]["stock_items"]["Insert"]>;
-        Relationships: [
-          { foreignKeyName: "stock_items_category_id_fkey"; columns: ["category_id"]; referencedRelation: "categories"; referencedColumns: ["id"] }
-        ];
-      };
-
-      // -----------------------------------------------------------------------
       product_variants: {
         Row: {
           id:            string;
-          product_id:    string | null;
-          stock_item_id: string | null;
+          product_id:    string;
           color_name:    string;
           color_hex:     string;
           display_order: number;
@@ -299,8 +269,7 @@ export type Database = {
         };
         Insert: {
           id?:            string;
-          product_id?:    string | null;
-          stock_item_id?: string | null;
+          product_id:     string;
           color_name:     string;
           color_hex:      string;
           display_order?: number;
@@ -310,8 +279,7 @@ export type Database = {
         };
         Update: Partial<Database["public"]["Tables"]["product_variants"]["Insert"]>;
         Relationships: [
-          { foreignKeyName: "product_variants_product_id_fkey"; columns: ["product_id"]; referencedRelation: "products"; referencedColumns: ["id"] },
-          { foreignKeyName: "product_variants_stock_item_id_fkey"; columns: ["stock_item_id"]; referencedRelation: "stock_items"; referencedColumns: ["id"] }
+          { foreignKeyName: "product_variants_product_id_fkey"; columns: ["product_id"]; referencedRelation: "products"; referencedColumns: ["id"] }
         ];
       };
 
@@ -370,66 +338,6 @@ export type Database = {
         Update: Partial<Database["public"]["Tables"]["product_variant_sizes"]["Insert"]>;
         Relationships: [
           { foreignKeyName: "product_variant_sizes_variant_id_fkey"; columns: ["variant_id"]; referencedRelation: "product_variants"; referencedColumns: ["id"] }
-        ];
-      };
-
-      // -----------------------------------------------------------------------
-      product_colors: {
-        Row: {
-          id:            string;
-          product_id:    string;
-          variant_id:    string;
-          display_order: number;
-          is_main:       boolean;
-          created_at:    string;
-          updated_at:    string;
-        };
-        Insert: {
-          id?:            string;
-          product_id:     string;
-          variant_id:     string;
-          display_order?: number;
-          is_main?:       boolean;
-          created_at?:    string;
-          updated_at?:    string;
-        };
-        Update: Partial<Database["public"]["Tables"]["product_colors"]["Insert"]>;
-        Relationships: [
-          { foreignKeyName: "product_colors_product_id_fkey"; columns: ["product_id"]; referencedRelation: "products"; referencedColumns: ["id"] },
-          { foreignKeyName: "product_colors_variant_id_fkey"; columns: ["variant_id"]; referencedRelation: "product_variants"; referencedColumns: ["id"] }
-        ];
-      };
-
-      // -----------------------------------------------------------------------
-      product_color_images: {
-        Row: {
-          id:                string;
-          product_color_id:  string;
-          url:                string;
-          storage_path:      string | null;
-          source:            string;
-          stock_media_id:    string | null;
-          is_primary:        boolean;
-          is_hover:          boolean;
-          display_order:     number;
-          created_at:        string;
-        };
-        Insert: {
-          id?:                string;
-          product_color_id:  string;
-          url:                string;
-          storage_path?:      string | null;
-          source:            string;
-          stock_media_id?:    string | null;
-          is_primary?:        boolean;
-          is_hover?:          boolean;
-          display_order?:     number;
-          created_at?:        string;
-        };
-        Update: Partial<Database["public"]["Tables"]["product_color_images"]["Insert"]>;
-        Relationships: [
-          { foreignKeyName: "product_color_images_product_color_id_fkey"; columns: ["product_color_id"]; referencedRelation: "product_colors"; referencedColumns: ["id"] },
-          { foreignKeyName: "product_color_images_stock_media_id_fkey"; columns: ["stock_media_id"]; referencedRelation: "product_variant_media"; referencedColumns: ["id"] }
         ];
       };
 
@@ -1192,9 +1100,6 @@ export type DbProductMedia         = Tables<"product_media">;
 export type DbProductVariant       = Tables<"product_variants">;
 export type DbProductVariantMedia  = Tables<"product_variant_media">;
 export type DbProductVariantSize   = Tables<"product_variant_sizes">;
-export type DbProductColor         = Tables<"product_colors">;
-export type DbProductColorImage    = Tables<"product_color_images">;
-export type DbStockItem            = Tables<"stock_items">;
 export type DbCustomer             = Tables<"customers">;
 export type DbCustomerNote         = Tables<"customer_notes">;
 export type DbCustomerSegment      = Tables<"customer_segments">;

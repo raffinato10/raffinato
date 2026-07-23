@@ -45,9 +45,6 @@ export interface ProductFormData {
   name: string;
   slug: string;
   sku: string;
-  // Quando preenchido, cor/tamanho/imagens deste produto vêm desta peça do
-  // estoque (stock_items), não de product_variants.product_id direto.
-  stock_item_id?: string | null;
   category_id: string;
   price_pix: number;
   price_card: number;
@@ -141,46 +138,6 @@ export async function toggleProductField(
   return {};
 }
 
-// Ajuste rápido de estoque flat (produtos sem variação de cor/tamanho) — usado
-// pela tela Estoque, que não passa pelo formulário completo de produto.
-export async function updateProductStock(
-  id: string,
-  stock: number
-): Promise<{ error?: string }> {
-  await requireAdmin();
-
-  if (stock < 0) return { error: "Estoque não pode ser negativo." };
-
-  const supabase = createServiceClient();
-
-  const { data: product, error: fetchError } = await supabase
-    .from("products")
-    .select("stock_minimum")
-    .eq("id", id)
-    .single();
-  if (fetchError || !product) return { error: "Produto não encontrado." };
-
-  const availability = computeAvailability({
-    track_stock: true,
-    stock,
-    stock_minimum: product.stock_minimum,
-  });
-
-  const { error } = await supabase
-    .from("products")
-    .update({ stock, availability })
-    .eq("id", id);
-
-  if (error) return { error: error.message };
-
-  revalidatePath("/admin/estoque");
-  revalidatePath("/admin/produtos");
-  revalidatePath("/produtos/[slug]", "page");
-  revalidatePath("/categoria/[slug]", "page");
-  revalidatePath("/");
-  return {};
-}
-
 export async function createProduct(
   data: ProductFormData
 ): Promise<{ error?: string; id?: string }> {
@@ -211,7 +168,6 @@ export async function createProduct(
       name:                data.name.trim(),
       slug:                data.slug.trim(),
       sku:                 data.sku.trim(),
-      stock_item_id:       data.stock_item_id ?? null,
       category_id:         data.category_id,
       price_pix:           data.price_pix,
       price_card:          data.price_card,
@@ -247,12 +203,7 @@ export async function createProduct(
     .select("id")
     .single();
 
-  if (error) {
-    if (error.code === "23505" && error.message.includes("stock_item")) {
-      return { error: "Esta peça do estoque já está vinculada a outro produto." };
-    }
-    return { error: error.message };
-  }
+  if (error) return { error: error.message };
 
   revalidatePath("/admin/produtos");
   revalidatePath("/produtos/[slug]", "page");
@@ -282,7 +233,6 @@ export async function updateProduct(
       name:                data.name.trim(),
       slug:                data.slug.trim(),
       sku:                 data.sku.trim(),
-      stock_item_id:       data.stock_item_id ?? null,
       category_id:         data.category_id,
       price_pix:           data.price_pix,
       price_card:          data.price_card,
@@ -317,12 +267,7 @@ export async function updateProduct(
     })
     .eq("id", id);
 
-  if (error) {
-    if (error.code === "23505" && error.message.includes("stock_item")) {
-      return { error: "Esta peça do estoque já está vinculada a outro produto." };
-    }
-    return { error: error.message };
-  }
+  if (error) return { error: error.message };
 
   revalidatePath("/admin/produtos");
   revalidatePath(`/admin/produtos/${id}/editar`);

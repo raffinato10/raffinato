@@ -27,7 +27,7 @@ function SectionCard({ title, children }: { title: string; children: React.React
 
 export default function ConfiguracoesPage() {
   const [activeTab, setActiveTab] = useState("loja");
-  const [storeName, setStoreName] = useState("Tio Snoop Imports");
+  const [storeName, setStoreName] = useState("Raffinato");
   const [storeEmail, setStoreEmail] = useState("contato@premiumstore.com.br");
   const [whatsapp, setWhatsapp] = useState("5511999999999");
   const [pixKey, setPixKey] = useState("contato@premiumstore.com.br");
@@ -74,7 +74,7 @@ export default function ConfiguracoesPage() {
                 <span className="text-sm text-dark-text">Habilitar Pix</span>
               </div>
               <Input label="Chave Pix" value={pixKey} onChange={(e) => setPixKey(e.target.value)} placeholder="CPF, CNPJ, e-mail ou telefone" />
-              <Input label="Nome do beneficiário" defaultValue="Tio Snoop Imports" />
+              <Input label="Nome do beneficiário" defaultValue="Raffinato" />
             </SectionCard>
             <SectionCard title="Cartão de crédito">
               <div className="flex items-center gap-4 mb-4">
@@ -157,7 +157,7 @@ export default function ConfiguracoesPage() {
                 />
               </div>
               <p className="text-xs text-muted">Cor atual: <span className="text-accent font-bold">#c9a84c (Gold premium)</span></p>
-              <p className="text-xs text-muted">A identidade visual da loja é fixa na paleta oficial Tio Snoop (preto, dourado e off-white).</p>
+              <p className="text-xs text-muted">A identidade visual da loja é fixa na paleta oficial Raffinato (preto, dourado e off-white).</p>
             </SectionCard>
             <SectionCard title="Logo e favicon">
               <Input label="URL do logo" placeholder="https://..." />

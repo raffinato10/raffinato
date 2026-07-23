@@ -22,8 +22,8 @@ export const PublicFooter = ({ categories }: Props) => (
     {/* Linha dourada topo */}
     <div className="h-px bg-gradient-to-r from-transparent via-accent/40 to-transparent" />
 
-    <div className="max-w-6xl mx-auto px-4 sm:px-6 py-16">
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-10 mb-12">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 md:py-16">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-x-8 gap-y-10 mb-10 md:mb-12">
 
         {/* Brand — Raffinato */}
         <div className="col-span-1 md:col-span-2">
@@ -33,7 +33,6 @@ export const PublicFooter = ({ categories }: Props) => (
               alt="Raffinato"
               width={180}
               height={56}
-              unoptimized
               className="h-10 w-auto object-contain brightness-0 invert opacity-90 hover:opacity-100 transition-opacity"
             />
           </Link>
@@ -102,7 +101,7 @@ export const PublicFooter = ({ categories }: Props) => (
 
       <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
         <p className="text-xs text-muted/70">
-          © {new Date().getFullYear()} Tio Snoop. Todos os direitos reservados.
+          © {new Date().getFullYear()} Raffinato. Todos os direitos reservados.
         </p>
         <div className="flex items-center gap-5">
           <span className="text-xs text-muted/70 flex items-center gap-1.5">

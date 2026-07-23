@@ -124,7 +124,7 @@ export function FeedbacksClient({ initialReviews, productOptions }: Props) {
                   <div className="flex items-center gap-3">
                     {r.image_url ? (
                       <div className="relative w-8 h-8 rounded-lg overflow-hidden flex-shrink-0">
-                        <Image src={r.image_url} alt={r.customer_name} fill className="object-cover" unoptimized />
+                        <Image src={r.image_url} alt={r.customer_name} fill className="object-cover" />
                       </div>
                     ) : r.video_url ? (
                       <div className="w-8 h-8 rounded-lg bg-dark-alt flex items-center justify-center flex-shrink-0">

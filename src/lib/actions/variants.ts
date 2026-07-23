@@ -31,15 +31,6 @@ async function requireAdmin() {
 }
 
 // ---------------------------------------------------------------------------
-// Dono de uma variante — um produto direto (modo legado/manual) ou uma peça
-// de estoque reutilizável (stock_items). Nunca os dois ao mesmo tempo.
-// ---------------------------------------------------------------------------
-
-export type VariantOwner =
-  | { type: "product"; id: string; baseSku?: string }
-  | { type: "stock_item"; id: string; baseSku?: string };
-
-// ---------------------------------------------------------------------------
 // Tipos do formulário — uma cor (variante) com suas imagens e tamanhos
 // ---------------------------------------------------------------------------
 
@@ -81,7 +72,8 @@ export interface VariantInput {
 // ---------------------------------------------------------------------------
 
 export async function saveVariants(
-  owner: VariantOwner,
+  productId: string,
+  baseSku: string | undefined,
   variants: VariantInput[],
   removedVariantIds: string[]
 ): Promise<{ error?: string }> {
@@ -175,8 +167,7 @@ export async function saveVariants(
       const { data: inserted, error } = await service
         .from("product_variants")
         .insert({
-          product_id:    owner.type === "product" ? owner.id : null,
-          stock_item_id: owner.type === "stock_item" ? owner.id : null,
+          product_id: productId,
           color_name: v.color_name.trim(),
           color_hex: v.color_hex.trim(),
           display_order: v.display_order,
@@ -290,7 +281,7 @@ export async function saveVariants(
     }
 
     for (const s of v.sizes.filter((s) => s.dbId)) {
-      const sku = s.sku?.trim() || generateVariantSku(owner.baseSku ?? "SKU", v.color_name, s.size);
+      const sku = s.sku?.trim() || generateVariantSku(baseSku ?? "SKU", v.color_name, s.size);
       const { error } = await service
         .from("product_variant_sizes")
         .update({
@@ -311,7 +302,7 @@ export async function saveVariants(
           variant_id: variantId,
           size: s.size.trim(),
           stock: s.stock,
-          sku: s.sku?.trim() || generateVariantSku(owner.baseSku ?? "SKU", v.color_name, s.size),
+          sku: s.sku?.trim() || generateVariantSku(baseSku ?? "SKU", v.color_name, s.size),
           low_stock_alert: s.low_stock_alert ?? 5,
           is_active: s.is_active ?? true,
         }))
@@ -320,18 +311,9 @@ export async function saveVariants(
     }
   }
 
-  if (owner.type === "product") {
-    revalidatePath(`/admin/produtos/${owner.id}/editar`);
-    revalidatePath("/produtos/[slug]", "page");
-  } else {
-    // products.updated_at já é tocado por updateProduct (chamado junto, no
-    // formulário de produto) — stock_items não tem equivalente, então sem
-    // isso aqui o VariantEditor reaberto continuaria com `key` igual ao de
-    // antes do save, podendo reusar estado obsoleto em vez de remontar com
-    // os dbIds reais das variações recém-criadas.
-    await service.from("stock_items").update({ updated_at: new Date().toISOString() }).eq("id", owner.id);
-  }
-  revalidatePath("/admin/estoque");
+  revalidatePath(`/admin/produtos/${productId}/editar`);
+  revalidatePath("/admin/produtos");
+  revalidatePath("/produtos/[slug]", "page");
   revalidatePath("/categoria/[slug]", "page");
   revalidatePath("/");
 

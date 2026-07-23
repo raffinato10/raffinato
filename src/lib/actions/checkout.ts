@@ -69,7 +69,6 @@ type ProductRow = {
   is_active: boolean;
   track_stock: boolean;
   stock: number | null;
-  stock_item_id: string | null;
   quantity_pricing_enabled: boolean;
   price_tiers: unknown;
   product_media: { url: string; is_main: boolean; display_order: number }[] | null;
@@ -83,8 +82,7 @@ type VariantSizeRow = {
   is_active: boolean;
   variant_id: string;
   product_variants: {
-    product_id: string | null;
-    stock_item_id: string | null;
+    product_id: string;
     color_name: string;
     color_hex: string;
     is_active: boolean;
@@ -104,7 +102,7 @@ async function resolveItems(
   const { data, error } = await service
     .from("products")
     .select(
-      "id, name, sku, category_id, price_pix, price_card, is_active, track_stock, stock, stock_item_id, quantity_pricing_enabled, price_tiers, product_media(url, is_main, display_order)"
+      "id, name, sku, category_id, price_pix, price_card, is_active, track_stock, stock, quantity_pricing_enabled, price_tiers, product_media(url, is_main, display_order)"
     )
     .in("id", productIds);
 
@@ -123,7 +121,7 @@ async function resolveItems(
   if (variantSizeIds.length > 0) {
     const { data: variantSizeData, error: variantSizeError } = await service
       .from("product_variant_sizes")
-      .select("id, size, stock, sku, is_active, variant_id, product_variants(product_id, stock_item_id, color_name, color_hex, is_active)")
+      .select("id, size, stock, sku, is_active, variant_id, product_variants(product_id, color_name, color_hex, is_active)")
       .in("id", variantSizeIds);
 
     if (variantSizeError) return { error: "Erro ao validar variações do pedido." };
@@ -156,15 +154,11 @@ async function resolveItems(
     if (req.variant_size_id) {
       const variantSize = variantSizeMap.get(req.variant_size_id);
       // Nunca confia que variant_size_id e product_id mandados pelo client
-      // realmente combinam entre si — exige que a variação pertença ao mesmo
-      // produto pedido, seja direto (product_id) ou via peça vinculada
-      // (stock_item_id do produto == stock_item_id da variante).
-      const belongsDirectly = variantSize?.product_variants?.product_id === req.product_id;
-      const belongsViaStockItem =
-        !!product.stock_item_id &&
-        variantSize?.product_variants?.stock_item_id === product.stock_item_id;
+      // realmente combinam entre si — exige que a variação pertença ao
+      // produto pedido.
+      const belongsToProduct = variantSize?.product_variants?.product_id === req.product_id;
 
-      if (!variantSize || !variantSize.product_variants || (!belongsDirectly && !belongsViaStockItem)) {
+      if (!variantSize || !variantSize.product_variants || !belongsToProduct) {
         return { error: `Variação inválida para "${product.name}".` };
       }
 

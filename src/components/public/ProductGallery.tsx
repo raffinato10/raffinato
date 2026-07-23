@@ -66,7 +66,6 @@ export const ProductGallery = ({ media, productName }: ProductGalleryProps) => {
               fill
               className="object-cover"
               priority
-              unoptimized
             />
             <button className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/20">
               <div className="w-10 h-10 bg-white/20 backdrop-blur rounded-full flex items-center justify-center">
@@ -139,7 +138,6 @@ export const ProductGallery = ({ media, productName }: ProductGalleryProps) => {
                     alt="Vídeo"
                     fill
                     className="object-cover"
-                    unoptimized
                   />
                   <div className="absolute inset-0 flex items-center justify-center bg-black/30">
                     <Play size={16} className="text-white" />
@@ -151,7 +149,6 @@ export const ProductGallery = ({ media, productName }: ProductGalleryProps) => {
                   alt={item.alt_text || `Foto ${i + 1}`}
                   fill
                   className="object-cover"
-                  unoptimized
                 />
               )}
             </button>

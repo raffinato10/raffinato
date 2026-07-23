@@ -52,7 +52,7 @@ function TestimonialCard({ review, onPlayVideo }: { review: Review; onPlayVideo:
           onClick={() => review.video_url && onPlayVideo(review.video_url)}
           className="relative w-full aspect-[4/3] bg-dark-alt block flex-shrink-0 group/media"
         >
-          <Image src={videoThumbnail} alt={review.customer_name} fill className="object-cover transition-transform duration-500 group-hover/media:scale-105" unoptimized draggable={false} />
+          <Image src={videoThumbnail} alt={review.customer_name} fill className="object-cover transition-transform duration-500 group-hover/media:scale-105" draggable={false} />
           <div className="absolute inset-0 bg-black/35 flex items-center justify-center">
             <div className="w-12 h-12 bg-white/95 rounded-full flex items-center justify-center shadow-lg transition-transform duration-200 group-hover/media:scale-110">
               <Play size={18} className="text-dark-bg fill-dark-bg ml-0.5" />
