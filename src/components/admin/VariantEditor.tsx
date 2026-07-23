@@ -4,13 +4,14 @@ import React, { useState, useCallback, useEffect, useRef } from "react";
 import Image from "next/image";
 import {
   Upload, X, Star, Sun, ImageIcon, Loader2, AlertCircle, Plus, Trash2, Wand2,
-  ChevronLeft, ChevronRight,
+  ChevronLeft, ChevronRight, RotateCw,
 } from "lucide-react";
 import { Input } from "@/components/common/Input";
 import { Button } from "@/components/common/Button";
 import { Toggle } from "@/components/common/Toggle";
 import { generateVariantSku } from "@/lib/sku";
 import { extractDroppedImageUrl } from "@/lib/drag-image-url";
+import { uploadProductImage } from "@/lib/upload-client";
 import type { ProductVariant } from "@/types";
 import type { VariantInput, VariantMediaInput, VariantSizeInput } from "@/lib/actions/variants";
 
@@ -138,48 +139,54 @@ function VariantImageUploader({
   const [dragging, setDragging] = useState(false);
   const dragCounter = useRef(0);
 
-  const uploadFile = async (file: File) => {
-    const localId = `local-${Date.now()}-${Math.random()}`;
-    const pending: MediaItem = {
-      localId,
-      url: URL.createObjectURL(file),
-      is_main: media.length === 0,
-      is_hover: false,
-      display_order: media.length,
-      uploading: true,
-    };
-    onChange([...media, pending]);
+  // `media` é uma prop controlada pelo pai — quando várias fotos são
+  // soltas de uma vez, cada upload roda em paralelo e resolve em momentos
+  // diferentes. Ler `mediaRef.current` (sempre o valor mais recente) em vez
+  // do `media` capturado no closure evita que uma resposta sobrescreva o
+  // item que outra upload concorrente acabou de adicionar/atualizar.
+  const mediaRef = useRef(media);
+  useEffect(() => {
+    mediaRef.current = media;
+  }, [media]);
 
-    const form = new FormData();
-    form.append("file", file);
-    form.append("productId", mediaFolderId);
+  // Mantém o File original — permite "Tentar novamente" sem reselecionar o
+  // arquivo depois de uma falha de rede no meio do envio.
+  const fileMapRef = useRef<Map<string, File>>(new Map());
+
+  const uploadFile = async (file: File, retryLocalId?: string) => {
+    const localId = retryLocalId ?? `local-${Date.now()}-${Math.random()}`;
+    fileMapRef.current.set(localId, file);
+
+    if (retryLocalId) {
+      onChange(mediaRef.current.map((it) => (it.localId === localId ? { ...it, uploading: true, uploadError: undefined } : it)));
+    } else {
+      const pending: MediaItem = {
+        localId,
+        url: URL.createObjectURL(file),
+        is_main: mediaRef.current.length === 0,
+        is_hover: false,
+        display_order: mediaRef.current.length,
+        uploading: true,
+      };
+      onChange([...mediaRef.current, pending]);
+    }
 
     try {
-      const res = await fetch("/api/admin/upload", { method: "POST", body: form });
-      const json = await res.json();
-
-      if (!res.ok) {
-        onChange(
-          [...media, pending].map((it) =>
-            it.localId === localId
-              ? { ...it, uploading: false, uploadError: json.error ?? "Erro no upload" }
-              : it
-          )
-        );
-        return;
-      }
-
+      const { url, storagePath } = await uploadProductImage(file, mediaFolderId);
+      fileMapRef.current.delete(localId);
       onChange(
-        [...media, pending].map((it) =>
+        mediaRef.current.map((it) =>
           it.localId === localId
-            ? { ...it, url: json.url, storagePath: json.storagePath, uploading: false, uploadError: undefined }
+            ? { ...it, url, storagePath, uploading: false, uploadError: undefined }
             : it
         )
       );
-    } catch {
+    } catch (err) {
       onChange(
-        [...media, pending].map((it) =>
-          it.localId === localId ? { ...it, uploading: false, uploadError: "Falha na conexão" } : it
+        mediaRef.current.map((it) =>
+          it.localId === localId
+            ? { ...it, uploading: false, uploadError: err instanceof Error ? err.message : "Falha na conexão" }
+            : it
         )
       );
     }
@@ -195,17 +202,17 @@ function VariantImageUploader({
   // Arrastado de outra aba/site (Pinterest, Google Imagens, etc.) — o
   // navegador só entrega o link da imagem, nunca o arquivo em si.
   const uploadFromUrl = async (url: string) => {
-    if (media.length >= MAX_IMAGES) return;
+    if (mediaRef.current.length >= MAX_IMAGES) return;
     const localId = `local-${Date.now()}-${Math.random()}`;
     const pending: MediaItem = {
       localId,
       url,
-      is_main: media.length === 0,
+      is_main: mediaRef.current.length === 0,
       is_hover: false,
-      display_order: media.length,
+      display_order: mediaRef.current.length,
       uploading: true,
     };
-    onChange([...media, pending]);
+    onChange([...mediaRef.current, pending]);
 
     try {
       const res = await fetch("/api/admin/upload-from-url", {
@@ -216,7 +223,7 @@ function VariantImageUploader({
       const json = await res.json();
 
       onChange(
-        [...media, pending].map((it) =>
+        mediaRef.current.map((it) =>
           it.localId === localId
             ? !res.ok
               ? { ...it, uploading: false, uploadError: json.error ?? "Erro ao baixar imagem" }
@@ -226,7 +233,7 @@ function VariantImageUploader({
       );
     } catch {
       onChange(
-        [...media, pending].map((it) =>
+        mediaRef.current.map((it) =>
           it.localId === localId ? { ...it, uploading: false, uploadError: "Falha na conexão" } : it
         )
       );
@@ -235,6 +242,7 @@ function VariantImageUploader({
 
   const removeItem = async (item: MediaItem) => {
     if (item.uploading) return;
+    fileMapRef.current.delete(item.localId);
     if (!item.dbId && item.storagePath) {
       await fetch(`/api/admin/upload?path=${encodeURIComponent(item.storagePath)}`, { method: "DELETE" });
     }
@@ -320,6 +328,25 @@ function VariantImageUploader({
                 <div className="w-full h-full flex flex-col items-center justify-center gap-1 p-1">
                   <AlertCircle size={16} className="text-danger" />
                   <p className="text-[10px] text-danger text-center leading-tight">{item.uploadError}</p>
+                  <div className="absolute top-1 right-1 flex gap-1">
+                    <button
+                      onClick={() => {
+                        const file = fileMapRef.current.get(item.localId);
+                        if (file) uploadFile(file, item.localId);
+                      }}
+                      className="w-5 h-5 bg-accent rounded flex items-center justify-center hover:bg-accent-light"
+                      title="Tentar novamente"
+                    >
+                      <RotateCw size={11} className="text-dark-bg" />
+                    </button>
+                    <button
+                      onClick={() => removeItem(item)}
+                      className="w-5 h-5 bg-danger rounded flex items-center justify-center hover:bg-danger/80"
+                      title="Remover"
+                    >
+                      <X size={11} className="text-white" />
+                    </button>
+                  </div>
                 </div>
               ) : (
                 <Image src={item.url} alt={`Imagem ${i + 1}`} fill className="object-cover" unoptimized />

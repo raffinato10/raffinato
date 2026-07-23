@@ -5,6 +5,7 @@ import Image from "next/image";
 import { Upload, X, Star, GripVertical, ImageIcon, Loader2, AlertCircle, Link as LinkIcon, RotateCw } from "lucide-react";
 import { toYoutubeEmbedUrl } from "@/lib/formatters";
 import { extractDroppedImageUrl } from "@/lib/drag-image-url";
+import { uploadProductImage } from "@/lib/upload-client";
 import type { ProductMedia } from "@/types";
 
 // ---------------------------------------------------------------------------
@@ -210,29 +211,7 @@ export function MediaUploader({
     }
 
     try {
-      const form = new FormData();
-      form.append("file", file);
-      form.append("productId", productId);
-
-      const res = await fetch("/api/admin/upload", {
-        method: "POST",
-        body: form,
-      });
-
-      const json = await res.json();
-
-      if (!res.ok) {
-        setItems((prev) => {
-          const next = prev.map((it) =>
-            it.localId === localId
-              ? { ...it, uploading: false, uploadError: json.error ?? "Erro no upload" }
-              : it
-          );
-          notify(next, removedDbIds, videoUrl);
-          return next;
-        });
-        return;
-      }
+      const { url, storagePath } = await uploadProductImage(file, productId);
 
       fileMapRef.current.delete(localId);
       setItems((prev) => {
@@ -240,8 +219,8 @@ export function MediaUploader({
           it.localId === localId
             ? {
                 ...it,
-                url: json.url,
-                storagePath: json.storagePath,
+                url,
+                storagePath,
                 uploading: false,
                 uploadError: undefined,
               }
@@ -250,11 +229,11 @@ export function MediaUploader({
         notify(next, removedDbIds, videoUrl);
         return next;
       });
-    } catch {
+    } catch (err) {
       setItems((prev) => {
         const next = prev.map((it) =>
           it.localId === localId
-            ? { ...it, uploading: false, uploadError: "Falha na conexão" }
+            ? { ...it, uploading: false, uploadError: err instanceof Error ? err.message : "Falha na conexão" }
             : it
         );
         notify(next, removedDbIds, videoUrl);
