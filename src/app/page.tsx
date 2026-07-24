@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { MessageCircle, ShieldCheck, Truck, Award, ArrowRight, RotateCcw, QrCode } from "lucide-react";
+import { MessageCircle, ShieldCheck, Truck, Award, ArrowRight, RotateCcw, QrCode, Lock } from "lucide-react";
 import { PublicNavbar } from "@/components/layout/PublicNavbar";
 import { PublicFooter } from "@/components/layout/PublicFooter";
 import { WhatsAppButton } from "@/components/layout/WhatsAppButton";
@@ -29,7 +29,7 @@ const BENEFIT_STRIP = [
 
 const BENEFITS = [
   { icon: ShieldCheck, title: "Qualidade garantida", desc: "Procedência e qualidade verificada." },
-  { icon: Truck, title: "Entrega discreta", desc: "Embalagem sem identificação do conteúdo." },
+  { icon: Lock, title: "Pagamento 100% seguro", desc: "Ambiente de compra protegido, do carrinho à confirmação." },
   { icon: MessageCircle, title: "Suporte via WhatsApp", desc: "Dúvidas direto com nossa equipe." },
   { icon: Award, title: "Produtos premium", desc: "Seleção rigorosa do melhor do mercado." },
 ];

@@ -1,4 +1,4 @@
-export const STORE_WHATSAPP = "5511999999999"; // TODO: conectar às configurações
+export const STORE_WHATSAPP = "5585999823352";
 
 interface WhatsAppOrderData {
   orderNumber: string;

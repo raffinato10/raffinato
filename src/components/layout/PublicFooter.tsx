@@ -38,7 +38,7 @@ export const PublicFooter = ({ categories }: Props) => (
           </Link>
           <p className="text-sm text-muted leading-relaxed max-w-xs mb-6">
             Produtos premium com segurança, qualidade e atendimento especializado.
-            Entregamos de forma discreta em todo o Brasil.
+            Entrega rápida para todo o Brasil.
           </p>
           <a
             href={generateStoreWhatsAppLink()}
