@@ -62,6 +62,17 @@ export const maskCpf = (value: string): string => {
   return clean;
 };
 
+export const maskCardNumber = (value: string): string => {
+  const clean = value.replace(/\D/g, "").slice(0, 19);
+  return clean.replace(/(.{4})/g, "$1 ").trim();
+};
+
+export const maskCardExpiry = (value: string): string => {
+  const clean = value.replace(/\D/g, "").slice(0, 4);
+  if (clean.length > 2) return `${clean.slice(0, 2)}/${clean.slice(2)}`;
+  return clean;
+};
+
 // Truncate texto
 export const truncate = (text: string, length: number): string =>
   text.length > length ? `${text.slice(0, length)}...` : text;

@@ -11,6 +11,10 @@ import type {
 // no mesmo formato que o checkout já usava antes de existir essa camada.
 // A confirmação real (em dev) acontece via POST /api/payments/dev-confirm,
 // que simula o que um webhook de gateway real enviaria.
+//
+// Também responde (com o mesmo Pix falso) quando o checkout pede cartão —
+// o dev-confirm simula a aprovação manualmente, já que o SDK 3DS real não
+// roda sem uma PYXGATE_SECRET_KEY válida.
 
 const FAKE_PIX_PREFIX =
   "00020126580014br.gov.bcb.pix0136123e4567-e12b-12d1-a456-42665544000053039865406";

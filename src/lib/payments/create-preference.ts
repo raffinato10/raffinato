@@ -1,5 +1,7 @@
 import { createServiceClient } from "@/lib/supabase/server";
 import { getPaymentProvider } from "./index";
+import { processPaymentResult } from "./process";
+import type { CardPaymentInput, PaymentVerificationStatus, ThreeDsDataInput } from "./types";
 
 type ServiceClient = ReturnType<typeof createServiceClient>;
 
@@ -8,16 +10,24 @@ export interface CreatePaymentPreferenceResult {
   pixCode?: string;
   pixQrUrl?: string;
   externalCheckoutUrl?: string;
+  status?: PaymentVerificationStatus;
+}
+
+export interface CreatePaymentPreferenceOptions {
+  paymentMethod?: "pix" | "card";
+  card?: CardPaymentInput;
+  threeDsData?: ThreeDsDataInput;
 }
 
 // Busca o pedido + itens reais no banco, pede ao provider ativo (stub hoje,
 // gateway real depois) uma preferência de pagamento, e persiste o
 // external_id/pix_code retornado em `payments`. Usado tanto pelo checkout
 // (logo após criar o pedido) quanto pelo Route Handler /api/payments/create-preference
-// (retry manual de pagamento).
+// (retry manual de pagamento — sempre Pix, sem dados de cartão).
 export async function createPaymentPreferenceForOrder(
   service: ServiceClient,
-  orderId: string
+  orderId: string,
+  options?: CreatePaymentPreferenceOptions
 ): Promise<CreatePaymentPreferenceResult | { error: string }> {
   const { data: order, error: orderError } = await service
     .from("orders")
@@ -47,6 +57,9 @@ export async function createPaymentPreferenceForOrder(
       quantity: i.quantity,
       unit_price: Number(i.unit_price_pix),
     })),
+    paymentMethod: options?.paymentMethod,
+    card: options?.card,
+    threeDsData: options?.threeDsData,
   });
 
   const pixQrUrl = result.pixQrBase64 ? `data:image/png;base64,${result.pixQrBase64}` : null;
@@ -63,10 +76,19 @@ export async function createPaymentPreferenceForOrder(
 
   if (updateError) return { error: updateError.message };
 
+  // Cartão pode resolver na hora (aprovado/recusado) — não espera o webhook
+  // pra atualizar pedido/estoque. Idempotente: se o webhook confirmar de
+  // novo depois, processPaymentResult já ignora reprocessamento.
+  if (result.status === "approved" || result.status === "rejected" || result.status === "cancelled") {
+    const processResult = await processPaymentResult({ service, orderId, status: result.status });
+    if (processResult.error) return { error: processResult.error };
+  }
+
   return {
     checkoutUrl: result.checkoutUrl,
     pixCode: result.pixCode,
     pixQrUrl: pixQrUrl ?? undefined,
     externalCheckoutUrl: result.externalCheckoutUrl,
+    status: result.status,
   };
 }

@@ -19,7 +19,7 @@ interface PagamentoClientProps {
   checkoutUrl: string | null;
   expiresAt: string | null;
   isStub: boolean;
-  providerName: string;
+  paymentMethod: "pix" | "card";
 }
 
 export function PagamentoClient({
@@ -31,7 +31,7 @@ export function PagamentoClient({
   checkoutUrl,
   expiresAt,
   isStub,
-  providerName,
+  paymentMethod,
 }: PagamentoClientProps) {
   const router = useRouter();
   const [copied, setCopied] = useState(false);
@@ -51,26 +51,16 @@ export function PagamentoClient({
   const mins = Math.floor(seconds / 60).toString().padStart(2, "0");
   const secs = (seconds % 60).toString().padStart(2, "0");
 
-  const isPicPay = providerName === "picpay";
-  const title = isPicPay ? "Pague com PicPay" : "Pague com Pix";
-  const qrAlt = isPicPay ? "QR Code PicPay" : "QR Code Pix";
-  const qrHint = isPicPay
-    ? "Escaneie o QR Code com o app do PicPay"
-    : "Escaneie o QR Code com o app do seu banco (Pix)";
-  const openLinkLabel = isPicPay ? "Abrir no app do PicPay" : "Ver comprovante de pagamento";
-  const steps = isPicPay
-    ? [
-        "Abra o app do PicPay (ou toque em \"Abrir no app do PicPay\" acima)",
-        "Escaneie o QR Code ou cole o código copiado",
-        "Confirme o pagamento no app",
-        "Aguarde a confirmação do pagamento",
-      ]
-    : [
-        "Abra o app do seu banco e escolha pagar via Pix",
-        "Escaneie o QR Code ou cole o código copiado",
-        "Confirme o pagamento no app",
-        "Aguarde a confirmação do pagamento",
-      ];
+  const title = "Pague com Pix";
+  const qrAlt = "QR Code Pix";
+  const qrHint = "Escaneie o QR Code com o app do seu banco (Pix)";
+  const openLinkLabel = "Ver comprovante de pagamento";
+  const steps = [
+    "Abra o app do seu banco e escolha pagar via Pix",
+    "Escaneie o QR Code ou cole o código copiado",
+    "Confirme o pagamento no app",
+    "Aguarde a confirmação do pagamento",
+  ];
 
   const handleCopy = () => {
     if (!pixCode) return;
@@ -100,6 +90,41 @@ export function PagamentoClient({
       setConfirming(false);
     }
   };
+
+  // Cartão normalmente resolve na hora (checkout já redireciona direto pra
+  // /pedido-confirmado quando aprovado) — só cai aqui se a PYX Gate devolveu
+  // "pending" (ex.: análise manual). Sem QR/código pra mostrar.
+  if (paymentMethod === "card") {
+    return (
+      <div className="py-12">
+        <Container size="sm">
+          <div className="mb-8">
+            <CheckoutSteps currentStep={3} />
+          </div>
+
+          <div className="text-center mb-8">
+            <h1 className="text-2xl font-bold text-dark-text mb-2">Pagamento em análise</h1>
+            <p className="text-muted">
+              Pedido #{orderNumber} · Total: <span className="text-accent font-bold">{formatCurrency(total)}</span>
+            </p>
+          </div>
+
+          <div className="flex flex-col items-center gap-4 p-8 bg-dark-surface rounded-2xl border border-dark-border mb-6 text-center">
+            <Loader2 size={40} className="text-accent animate-spin" />
+            <p className="text-sm text-muted">
+              Seu pagamento com cartão está sendo processado. Assim que for aprovado, você verá a confirmação aqui.
+            </p>
+          </div>
+
+          <a href={`${generateStoreWhatsAppLink()}?text=Preciso+de+ajuda+com+o+pagamento+do+pedido+${orderNumber}`} target="_blank" rel="noopener noreferrer">
+            <Button variant="outline" fullWidth leftIcon={<MessageCircle size={16} />}>
+              Preciso de ajuda — WhatsApp
+            </Button>
+          </a>
+        </Container>
+      </div>
+    );
+  }
 
   return (
     <div className="py-12">

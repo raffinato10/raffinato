@@ -4,6 +4,7 @@ import { createServiceClient } from "@/lib/supabase/server";
 import { resolveBasePrice, calculateQuantityDiscountPrice } from "@/lib/pricing";
 import { getShippingForCep } from "@/data/mock-shipping";
 import { createPaymentPreferenceForOrder } from "@/lib/payments/create-preference";
+import type { CardPaymentInput, ThreeDsDataInput } from "@/lib/payments/types";
 import { digitsOnly, isValidCpf } from "@/lib/cpf";
 
 // ---------------------------------------------------------------------------
@@ -34,12 +35,19 @@ export interface CheckoutFormData {
   items: CheckoutItemInput[];
   coupon_code?: string;
   shipping_code: string;
+  // Default "pix" quando omitido. Cartão exige card + threeDsData (o desafio
+  // 3DS já rodou no browser antes de chamar essa action — ver checkout/page.tsx).
+  payment_method?: "pix" | "card";
+  card?: CardPaymentInput;
+  threeDsData?: ThreeDsDataInput;
 }
 
 export interface CreateOrderResult {
   orderId: string;
   orderNumber: string;
   total: number;
+  // Só presente quando o pagamento (cartão) já resolveu na hora do checkout.
+  paymentStatus?: "approved";
 }
 
 interface ComputedItem {
@@ -355,6 +363,11 @@ export async function createOrder(
   // depois na busca pública de pedidos por CPF (tela Acompanhar Pedido).
   if (data.cpf?.trim() && !isValidCpf(data.cpf)) return { error: "CPF inválido." };
 
+  const paymentMethod: "pix" | "card" = data.payment_method === "card" ? "card" : "pix";
+  if (paymentMethod === "card" && (!data.card || !data.threeDsData)) {
+    return { error: "Dados de cartão inválidos." };
+  }
+
   const service = createServiceClient();
 
   try {
@@ -363,7 +376,11 @@ export async function createOrder(
     if ("error" in itemsResult) return { error: itemsResult.error };
     const items = itemsResult.items;
 
-    const subtotalPix = Number(items.reduce((sum, i) => sum + i.subtotal, 0).toFixed(2));
+    // Cartão cobra price_card (sem desconto por quantidade, que é exclusivo
+    // do Pix) — mesma regra já usada em getTotalCard() no cart-store.
+    const subtotal = paymentMethod === "card"
+      ? Number(items.reduce((sum, i) => sum + i.unit_price_card * i.quantity, 0).toFixed(2))
+      : Number(items.reduce((sum, i) => sum + i.subtotal, 0).toFixed(2));
 
     // 1b. Revalida o frete contra a simulação por CEP (nunca usa o valor enviado pelo cliente)
     const shippingResult = resolveShipping(data.cep, data.shipping_code);
@@ -371,12 +388,12 @@ export async function createOrder(
     const shippingValue = shippingResult.shipping.value;
 
     // 2. Revalida o cupom contra o banco (nunca usa o desconto enviado pelo cliente)
-    const couponResult = await resolveCoupon(service, data.coupon_code, subtotalPix, shippingValue, items);
+    const couponResult = await resolveCoupon(service, data.coupon_code, subtotal, shippingValue, items);
     if ("error" in couponResult) return { error: couponResult.error };
     const coupon = couponResult.coupon;
 
     const couponDiscount = coupon?.discount ?? 0;
-    const total = Math.max(0, Number((subtotalPix + shippingValue - couponDiscount).toFixed(2)));
+    const total = Math.max(0, Number((subtotal + shippingValue - couponDiscount).toFixed(2)));
 
     // 3. Upsert cliente por e-mail (cria se novo, atualiza dados se existente)
     // cpf_cnpj só entra no payload se foi informado nesta compra — senão o
@@ -412,7 +429,7 @@ export async function createOrder(
         customer_name:         data.name.trim(),
         customer_email:        data.email.trim().toLowerCase(),
         customer_phone:        data.phone.trim(),
-        payment_method:        "pix" as const,
+        payment_method:        paymentMethod,
         shipping_street:       data.street.trim(),
         shipping_number:       data.number.trim(),
         shipping_complement:   data.complement.trim() || null,
@@ -420,7 +437,7 @@ export async function createOrder(
         shipping_city:         data.city.trim(),
         shipping_state:        data.state.trim(),
         shipping_zip_code:     data.cep.trim(),
-        subtotal:              subtotalPix,
+        subtotal:              subtotal,
         coupon_code:           coupon?.code ?? null,
         coupon_discount:       couponDiscount,
         shipping_value:        shippingValue,
@@ -461,10 +478,12 @@ export async function createOrder(
     // pelo provider de pagamento ativo — stub hoje, gateway real depois)
     const { error: paymentError } = await service.from("payments").insert({
       order_id:       orderId,
-      method:         "pix" as const,
+      method:         paymentMethod,
       status:         "pending" as const,
       amount:         total,
-      pix_expiration: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
+      ...(paymentMethod === "pix"
+        ? { pix_expiration: new Date(Date.now() + 15 * 60 * 1000).toISOString() }
+        : {}),
     });
 
     if (paymentError) throw paymentError;
@@ -494,9 +513,21 @@ export async function createOrder(
     }
 
     // 9. Cria a preferência de pagamento (provider ativo — stub por enquanto)
-    // e grava external_id/pix_code reais em `payments`.
-    const preferenceResult = await createPaymentPreferenceForOrder(service, orderId);
+    // e grava external_id/pix_code reais em `payments`. Cartão autoriza na
+    // hora — preferenceResult.status já vem "approved"/"rejected"/"cancelled".
+    const preferenceResult = await createPaymentPreferenceForOrder(service, orderId, {
+      paymentMethod,
+      card: data.card,
+      threeDsData: data.threeDsData,
+    });
     if ("error" in preferenceResult) throw new Error(preferenceResult.error);
+
+    if (preferenceResult.status === "approved") {
+      return { orderId, orderNumber, total, paymentStatus: "approved" };
+    }
+    if (preferenceResult.status === "rejected" || preferenceResult.status === "cancelled") {
+      return { error: "Pagamento recusado pela operadora do cartão. Tente novamente ou pague com Pix." };
+    }
 
     return { orderId, orderNumber, total };
   } catch (err: unknown) {

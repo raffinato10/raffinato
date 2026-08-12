@@ -1,6 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 import { getOrderByIdAdmin, getOrderPayment } from "@/lib/db/orders";
-import { getPaymentProvider, isStubPaymentProvider } from "@/lib/payments";
+import { isStubPaymentProvider } from "@/lib/payments";
 import { routes } from "@/lib/routes";
 import { PagamentoClient } from "@/components/public/PagamentoClient";
 
@@ -30,7 +30,7 @@ export default async function PagamentoPage({
       checkoutUrl={payment?.checkout_url ?? null}
       expiresAt={payment?.pix_expiration ?? null}
       isStub={isStubPaymentProvider()}
-      providerName={getPaymentProvider().name}
+      paymentMethod={order.payment_method}
     />
   );
 }
