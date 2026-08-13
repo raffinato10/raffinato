@@ -35,9 +35,27 @@ export const mockShippingOptions: ShippingOption[] = [
   },
 ];
 
+// CEP de teste — só usado pra testar pagamento com um total baixo. Não
+// aparece pra clientes reais (nenhum CEP de verdade cai nesse valor).
+// Remover depois de terminar os testes de pagamento.
+const TEST_CEP = "00000000";
+const TEST_SHIPPING_OPTION: ShippingOption = {
+  code: "TESTE",
+  name: "Frete teste",
+  carrier: "Interno",
+  price: 0.5,
+  delivery_days: 1,
+  description: "Opção de teste — não usar em pedidos reais",
+};
+
 export const getShippingForCep = (cep: string): ShippingOption[] => {
-  // Mock: sempre retorna as opções, com variação por region
   const cleanCep = cep.replace(/\D/g, "");
+
+  if (cleanCep === TEST_CEP) {
+    return [TEST_SHIPPING_OPTION];
+  }
+
+  // Mock: sempre retorna as opções, com variação por region
   const prefix = parseInt(cleanCep.substring(0, 2));
 
   // Sul e Sudeste: frete menor
