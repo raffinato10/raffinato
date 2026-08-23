@@ -1,11 +1,12 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Save } from "lucide-react";
 import { Button } from "@/components/common/Button";
 import { Input } from "@/components/common/Input";
 import { Toggle } from "@/components/common/Toggle";
 import { Tabs, TabContent } from "@/components/common/Tabs";
+import { getShippingSettings, updateShippingSettings } from "@/lib/actions/settings";
 
 const TABS = [
   { value: "loja", label: "Loja" },
@@ -33,8 +34,59 @@ export default function ConfiguracoesPage() {
   const [pixKey, setPixKey] = useState("contato@premiumstore.com.br");
   const [pixEnabled, setPixEnabled] = useState(true);
   const [cardEnabled, setCardEnabled] = useState(false);
-  const [freeShippingAbove, setFreeShippingAbove] = useState("500");
   const [maintenanceMode, setMaintenanceMode] = useState(false);
+
+  // Frete fixo por quantidade — único bloco desta tela que já persiste de
+  // verdade (store_settings_public), o resto das abas ainda é mock.
+  const [shippingThreshold, setShippingThreshold] = useState("5");
+  const [shippingPriceStandard, setShippingPriceStandard] = useState("35");
+  const [shippingPriceAbove, setShippingPriceAbove] = useState("40");
+  const [shippingLoading, setShippingLoading] = useState(true);
+  const [shippingSaving, setShippingSaving] = useState(false);
+  const [shippingError, setShippingError] = useState("");
+  const [shippingSaved, setShippingSaved] = useState(false);
+
+  useEffect(() => {
+    getShippingSettings().then((result) => {
+      if ("error" in result) {
+        setShippingError(result.error);
+      } else {
+        setShippingThreshold(String(result.threshold_qty));
+        setShippingPriceStandard(String(result.price_standard));
+        setShippingPriceAbove(String(result.price_above));
+      }
+      setShippingLoading(false);
+    });
+  }, []);
+
+  const handleSaveShipping = async () => {
+    setShippingError("");
+    setShippingSaved(false);
+
+    const threshold_qty = parseInt(shippingThreshold, 10);
+    const price_standard = parseFloat(shippingPriceStandard);
+    const price_above = parseFloat(shippingPriceAbove);
+
+    if (!Number.isInteger(threshold_qty) || threshold_qty < 1) {
+      setShippingError("Quantidade limite precisa ser um número inteiro maior que zero.");
+      return;
+    }
+    if (Number.isNaN(price_standard) || Number.isNaN(price_above)) {
+      setShippingError("Preencha os dois valores de frete.");
+      return;
+    }
+
+    setShippingSaving(true);
+    const result = await updateShippingSettings({ threshold_qty, price_standard, price_above });
+    setShippingSaving(false);
+
+    if (result.error) {
+      setShippingError(result.error);
+      return;
+    }
+    setShippingSaved(true);
+    setTimeout(() => setShippingSaved(false), 3000);
+  };
 
   return (
     <div className="space-y-6">
@@ -95,18 +147,48 @@ export default function ConfiguracoesPage() {
 
         <TabContent value="frete" active={activeTab}>
           <div className="space-y-4 mt-6">
-            <SectionCard title="Frete grátis">
-              <Input label="Frete grátis acima de (R$)" type="number" value={freeShippingAbove} onChange={(e) => setFreeShippingAbove(e.target.value)} />
-              <p className="text-xs text-muted">Deixe em branco para não oferecer frete grátis automático.</p>
-            </SectionCard>
-            <SectionCard title="Transportadoras">
-              {["Correios PAC", "Correios SEDEX", "Jadlog .E", "Total Express"].map((carrier) => (
-                <div key={carrier} className="flex items-center justify-between py-2 border-b border-dark-border last:border-0">
-                  <span className="text-sm text-dark-text">{carrier}</span>
-                  <Toggle checked size="sm" onChange={() => {}} />
-                </div>
-              ))}
-              <p className="text-xs text-muted mt-2">Integração com API de frete real na Fase 3.</p>
+            <SectionCard title="Frete fixo">
+              <p className="text-xs text-muted -mt-1">
+                Mesmo valor para todos os clientes, em todo o Brasil — não aparece nome de
+                transportadora pro cliente, você escolhe qual usar na hora do envio.
+              </p>
+
+              {shippingLoading ? (
+                <p className="text-sm text-muted">Carregando...</p>
+              ) : (
+                <>
+                  <Input
+                    label="Até quantos itens no pedido usa o valor padrão"
+                    type="number"
+                    min={1}
+                    value={shippingThreshold}
+                    onChange={(e) => setShippingThreshold(e.target.value)}
+                  />
+                  <Input
+                    label="Frete padrão (R$)"
+                    type="number"
+                    step="0.01"
+                    min={0}
+                    value={shippingPriceStandard}
+                    onChange={(e) => setShippingPriceStandard(e.target.value)}
+                  />
+                  <Input
+                    label={`Frete acima de ${shippingThreshold || "N"} itens (R$)`}
+                    type="number"
+                    step="0.01"
+                    min={0}
+                    value={shippingPriceAbove}
+                    onChange={(e) => setShippingPriceAbove(e.target.value)}
+                  />
+
+                  {shippingError && <p className="text-xs text-danger">{shippingError}</p>}
+                  {shippingSaved && <p className="text-xs text-success">Frete atualizado com sucesso.</p>}
+
+                  <Button variant="accent" size="sm" isLoading={shippingSaving} onClick={handleSaveShipping}>
+                    Salvar frete
+                  </Button>
+                </>
+              )}
             </SectionCard>
           </div>
         </TabContent>

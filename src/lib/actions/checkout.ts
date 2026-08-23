@@ -2,7 +2,7 @@
 
 import { createServiceClient } from "@/lib/supabase/server";
 import { resolveBasePrice, calculateQuantityDiscountPrice } from "@/lib/pricing";
-import { getShippingForCep } from "@/data/mock-shipping";
+import { computeFlatShipping, DEFAULT_FLAT_SHIPPING_SETTINGS } from "@/lib/shipping";
 import { createPaymentPreferenceForOrder } from "@/lib/payments/create-preference";
 import type { CardPaymentInput, ThreeDsDataInput } from "@/lib/payments/types";
 import { digitsOnly, isValidCpf } from "@/lib/cpf";
@@ -34,7 +34,6 @@ export interface CheckoutFormData {
   state: string;
   items: CheckoutItemInput[];
   coupon_code?: string;
-  shipping_code: string;
   // Default "pix" quando omitido. Cartão exige card + threeDsData (o desafio
   // 3DS já rodou no browser antes de chamar essa action — ver checkout/page.tsx).
   payment_method?: "pix" | "card";
@@ -316,32 +315,32 @@ async function resolveCoupon(
 }
 
 interface ResolvedShipping {
-  code: string;
-  name: string;
   value: number;
 }
 
-// Revalida o frete contra a simulação por CEP (mesma fonte usada no client,
-// data/mock-shipping.ts) — o valor mostrado na tela nunca é o que vai pro
-// banco; só o código da opção escolhida importa.
-function resolveShipping(
-  cep: string,
-  shippingCode: string
-): { shipping: ResolvedShipping } | { error: string } {
-  const options = getShippingForCep(cep);
-  const option = options.find((o) => o.code === shippingCode);
+// Frete fixo por quantidade de itens — nunca confia no valor mostrado na
+// tela, sempre recalcula a partir da configuração real (store_settings_public,
+// editável em Admin > Configurações > Frete) e da quantidade real do pedido.
+async function resolveShipping(
+  service: ReturnType<typeof createServiceClient>,
+  totalQuantity: number
+): Promise<{ shipping: ResolvedShipping }> {
+  const { data } = await service
+    .from("store_settings_public")
+    .select("shipping_flat_threshold_qty, shipping_flat_price_standard, shipping_flat_price_above")
+    .single();
 
-  if (!option) {
-    return { error: "Opção de frete inválida para o CEP informado." };
-  }
+  const settings = data
+    ? {
+        threshold_qty: data.shipping_flat_threshold_qty,
+        price_standard: Number(data.shipping_flat_price_standard),
+        price_above: Number(data.shipping_flat_price_above),
+      }
+    : DEFAULT_FLAT_SHIPPING_SETTINGS;
 
-  return {
-    shipping: {
-      code: option.code,
-      name: option.name,
-      value: Number(option.price.toFixed(2)),
-    },
-  };
+  const option = computeFlatShipping(totalQuantity, settings);
+
+  return { shipping: { value: Number(option.price.toFixed(2)) } };
 }
 
 export async function createOrder(
@@ -357,7 +356,6 @@ export async function createOrder(
   if (!data.neighborhood.trim()) return { error: "Bairro é obrigatório." };
   if (!data.city.trim())         return { error: "Cidade é obrigatória." };
   if (!data.state.trim())        return { error: "Estado é obrigatório." };
-  if (!data.shipping_code?.trim()) return { error: "Selecione uma opção de frete." };
   if (!data.items || data.items.length === 0) return { error: "Carrinho vazio." };
   // CPF é opcional no checkout, mas se informado precisa ser válido — usado
   // depois na busca pública de pedidos por CPF (tela Acompanhar Pedido).
@@ -382,9 +380,9 @@ export async function createOrder(
       ? Number(items.reduce((sum, i) => sum + i.unit_price_card * i.quantity, 0).toFixed(2))
       : Number(items.reduce((sum, i) => sum + i.subtotal, 0).toFixed(2));
 
-    // 1b. Revalida o frete contra a simulação por CEP (nunca usa o valor enviado pelo cliente)
-    const shippingResult = resolveShipping(data.cep, data.shipping_code);
-    if ("error" in shippingResult) return { error: shippingResult.error };
+    // 1b. Frete fixo por quantidade — nunca usa o valor enviado pelo cliente
+    const totalQuantity = items.reduce((sum, i) => sum + i.quantity, 0);
+    const shippingResult = await resolveShipping(service, totalQuantity);
     const shippingValue = shippingResult.shipping.value;
 
     // 2. Revalida o cupom contra o banco (nunca usa o desconto enviado pelo cliente)
@@ -441,7 +439,7 @@ export async function createOrder(
         coupon_code:           coupon?.code ?? null,
         coupon_discount:       couponDiscount,
         shipping_value:        shippingValue,
-        shipping_service:      shippingResult.shipping.name,
+        shipping_service:      null,
         total,
       })
       .select("id, order_number")

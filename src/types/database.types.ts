@@ -822,6 +822,9 @@ export type Database = {
           address:          string | null;
           meta_title:       string | null;
           meta_description: string | null;
+          shipping_flat_threshold_qty:  number;
+          shipping_flat_price_standard: number;
+          shipping_flat_price_above:    number;
           updated_at:       string;
         };
         Insert: {
@@ -835,6 +838,9 @@ export type Database = {
           address?:          string | null;
           meta_title?:       string | null;
           meta_description?: string | null;
+          shipping_flat_threshold_qty?:  number;
+          shipping_flat_price_standard?: number;
+          shipping_flat_price_above?:    number;
           updated_at?:       string;
         };
         Update: Partial<Database["public"]["Tables"]["store_settings_public"]["Insert"]>;

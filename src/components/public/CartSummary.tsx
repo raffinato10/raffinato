@@ -6,7 +6,7 @@ import { ShoppingBag } from "lucide-react";
 import { Button } from "@/components/common/Button";
 import { CartItem } from "@/components/public/CartItem";
 import { CouponInput } from "@/components/public/CouponInput";
-import { ShippingCalculatorMock } from "@/components/public/ShippingCalculatorMock";
+import { ShippingFlatInfo } from "@/components/public/ShippingFlatInfo";
 import { formatCurrency } from "@/lib/formatters";
 import { useCartStore } from "@/store/cart-store";
 import { routes } from "@/lib/routes";
@@ -91,7 +91,7 @@ export const CartSummary = () => {
             <CouponInput />
           </div>
           <div className="bg-dark-surface rounded-2xl border border-dark-border p-4">
-            <ShippingCalculatorMock />
+            <ShippingFlatInfo />
           </div>
         </div>
       </div>
@@ -129,7 +129,7 @@ export const CartSummary = () => {
                 ? "Grátis"
                 : shipping_option
                 ? formatCurrency(shipping)
-                : "Calcule acima"}
+                : "Calculando..."}
             </span>
           </div>
 
@@ -160,7 +160,7 @@ export const CartSummary = () => {
               <Button variant="accent" fullWidth size="lg" disabled className="mt-1">
                 Continuar para checkout
               </Button>
-              <p className="text-xs text-center text-muted">Calcule o frete para continuar</p>
+              <p className="text-xs text-center text-muted">Calculando o frete...</p>
             </>
           )}
         </div>

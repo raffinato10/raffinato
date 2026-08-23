@@ -199,7 +199,6 @@ export default function CheckoutPage() {
           quantity: i.quantity,
         })),
         coupon_code:   coupon_code ?? undefined,
-        shipping_code: shipping_option?.code ?? "",
         payment_method: paymentMethod,
       };
 
