@@ -1,12 +1,30 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { Save } from "lucide-react";
+import { Save, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/common/Button";
 import { Input } from "@/components/common/Input";
 import { Toggle } from "@/components/common/Toggle";
 import { Tabs, TabContent } from "@/components/common/Tabs";
-import { getShippingSettings, updateShippingSettings } from "@/lib/actions/settings";
+import { getShippingTiers, updateShippingTiers } from "@/lib/actions/settings";
+import type { ShippingTier } from "@/lib/shipping";
+
+interface TierRow {
+  key: string;
+  min_qty: string;
+  max_qty: string; // "" = sem limite superior
+  price: string;
+}
+
+let tierKeySeq = 0;
+const newTierKey = () => `tier-${++tierKeySeq}`;
+
+const tierToRow = (t: ShippingTier): TierRow => ({
+  key: newTierKey(),
+  min_qty: String(t.min_qty),
+  max_qty: t.max_qty === null ? "" : String(t.max_qty),
+  price: String(t.price),
+});
 
 const TABS = [
   { value: "loja", label: "Loja" },
@@ -36,48 +54,57 @@ export default function ConfiguracoesPage() {
   const [cardEnabled, setCardEnabled] = useState(false);
   const [maintenanceMode, setMaintenanceMode] = useState(false);
 
-  // Frete fixo por quantidade — único bloco desta tela que já persiste de
-  // verdade (store_settings_public), o resto das abas ainda é mock.
-  const [shippingThreshold, setShippingThreshold] = useState("5");
-  const [shippingPriceStandard, setShippingPriceStandard] = useState("35");
-  const [shippingPriceAbove, setShippingPriceAbove] = useState("40");
+  // Frete fixo por faixa de quantidade — único bloco desta tela que já
+  // persiste de verdade (shipping_tiers), o resto das abas ainda é mock.
+  const [tierRows, setTierRows] = useState<TierRow[]>([]);
   const [shippingLoading, setShippingLoading] = useState(true);
   const [shippingSaving, setShippingSaving] = useState(false);
   const [shippingError, setShippingError] = useState("");
   const [shippingSaved, setShippingSaved] = useState(false);
 
   useEffect(() => {
-    getShippingSettings().then((result) => {
+    getShippingTiers().then((result) => {
       if ("error" in result) {
         setShippingError(result.error);
       } else {
-        setShippingThreshold(String(result.threshold_qty));
-        setShippingPriceStandard(String(result.price_standard));
-        setShippingPriceAbove(String(result.price_above));
+        setTierRows(result.length > 0 ? result.map(tierToRow) : [tierToRow({ min_qty: 1, max_qty: null, price: 0 })]);
       }
       setShippingLoading(false);
     });
   }, []);
 
+  const addTierRow = () => {
+    const last = tierRows[tierRows.length - 1];
+    const nextMin = last?.max_qty ? Number(last.max_qty) + 1 : last ? Number(last.min_qty) + 1 : 1;
+    setTierRows([...tierRows, { key: newTierKey(), min_qty: String(nextMin), max_qty: "", price: "" }]);
+  };
+
+  const removeTierRow = (key: string) => {
+    setTierRows(tierRows.filter((r) => r.key !== key));
+  };
+
+  const updateTierRow = (key: string, field: "min_qty" | "max_qty" | "price", value: string) => {
+    setTierRows(tierRows.map((r) => (r.key === key ? { ...r, [field]: value } : r)));
+  };
+
   const handleSaveShipping = async () => {
     setShippingError("");
     setShippingSaved(false);
 
-    const threshold_qty = parseInt(shippingThreshold, 10);
-    const price_standard = parseFloat(shippingPriceStandard);
-    const price_above = parseFloat(shippingPriceAbove);
-
-    if (!Number.isInteger(threshold_qty) || threshold_qty < 1) {
-      setShippingError("Quantidade limite precisa ser um número inteiro maior que zero.");
-      return;
-    }
-    if (Number.isNaN(price_standard) || Number.isNaN(price_above)) {
-      setShippingError("Preencha os dois valores de frete.");
-      return;
+    const tiers: ShippingTier[] = [];
+    for (const row of tierRows) {
+      const min_qty = parseInt(row.min_qty, 10);
+      const price = parseFloat(row.price);
+      if (!Number.isInteger(min_qty) || Number.isNaN(price)) {
+        setShippingError("Preencha \"de\" e o valor de frete em todas as faixas.");
+        return;
+      }
+      const max_qty = row.max_qty.trim() === "" ? null : parseInt(row.max_qty, 10);
+      tiers.push({ min_qty, max_qty, price });
     }
 
     setShippingSaving(true);
-    const result = await updateShippingSettings({ threshold_qty, price_standard, price_above });
+    const result = await updateShippingTiers(tiers);
     setShippingSaving(false);
 
     if (result.error) {
@@ -147,39 +174,62 @@ export default function ConfiguracoesPage() {
 
         <TabContent value="frete" active={activeTab}>
           <div className="space-y-4 mt-6">
-            <SectionCard title="Frete fixo">
+            <SectionCard title="Frete fixo por faixa de quantidade">
               <p className="text-xs text-muted -mt-1">
                 Mesmo valor para todos os clientes, em todo o Brasil — não aparece nome de
-                transportadora pro cliente, você escolhe qual usar na hora do envio.
+                transportadora pro cliente, você escolhe qual usar na hora do envio. Adicione
+                quantas faixas quiser; deixe "até" em branco na última pra não ter limite superior.
               </p>
 
               {shippingLoading ? (
                 <p className="text-sm text-muted">Carregando...</p>
               ) : (
                 <>
-                  <Input
-                    label="Até quantos itens no pedido usa o valor padrão"
-                    type="number"
-                    min={1}
-                    value={shippingThreshold}
-                    onChange={(e) => setShippingThreshold(e.target.value)}
-                  />
-                  <Input
-                    label="Frete padrão (R$)"
-                    type="number"
-                    step="0.01"
-                    min={0}
-                    value={shippingPriceStandard}
-                    onChange={(e) => setShippingPriceStandard(e.target.value)}
-                  />
-                  <Input
-                    label={`Frete acima de ${shippingThreshold || "N"} itens (R$)`}
-                    type="number"
-                    step="0.01"
-                    min={0}
-                    value={shippingPriceAbove}
-                    onChange={(e) => setShippingPriceAbove(e.target.value)}
-                  />
+                  <div className="space-y-2">
+                    <div className="hidden sm:grid grid-cols-[1fr_1fr_1fr_auto] gap-2 text-xs text-muted px-1">
+                      <span>De (itens)</span>
+                      <span>Até (itens, opcional)</span>
+                      <span>Frete (R$)</span>
+                      <span />
+                    </div>
+                    {tierRows.map((row) => (
+                      <div key={row.key} className="grid grid-cols-2 sm:grid-cols-[1fr_1fr_1fr_auto] gap-2 items-start">
+                        <Input
+                          type="number"
+                          min={1}
+                          placeholder="De"
+                          value={row.min_qty}
+                          onChange={(e) => updateTierRow(row.key, "min_qty", e.target.value)}
+                        />
+                        <Input
+                          type="number"
+                          min={1}
+                          placeholder="Sem limite"
+                          value={row.max_qty}
+                          onChange={(e) => updateTierRow(row.key, "max_qty", e.target.value)}
+                        />
+                        <Input
+                          type="number"
+                          step="0.01"
+                          min={0}
+                          placeholder="Valor"
+                          value={row.price}
+                          onChange={(e) => updateTierRow(row.key, "price", e.target.value)}
+                        />
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => removeTierRow(row.key)}
+                          disabled={tierRows.length === 1}
+                          leftIcon={<Trash2 size={14} />}
+                        />
+                      </div>
+                    ))}
+                  </div>
+
+                  <Button variant="secondary" size="sm" leftIcon={<Plus size={14} />} onClick={addTierRow}>
+                    Adicionar faixa
+                  </Button>
 
                   {shippingError && <p className="text-xs text-danger">{shippingError}</p>}
                   {shippingSaved && <p className="text-xs text-success">Frete atualizado com sucesso.</p>}

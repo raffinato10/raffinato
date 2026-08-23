@@ -2,7 +2,7 @@
 
 import { createServiceClient } from "@/lib/supabase/server";
 import { resolveBasePrice, calculateQuantityDiscountPrice } from "@/lib/pricing";
-import { computeFlatShipping, DEFAULT_FLAT_SHIPPING_SETTINGS } from "@/lib/shipping";
+import { computeFlatShipping, DEFAULT_SHIPPING_TIERS } from "@/lib/shipping";
 import { createPaymentPreferenceForOrder } from "@/lib/payments/create-preference";
 import type { CardPaymentInput, ThreeDsDataInput } from "@/lib/payments/types";
 import { digitsOnly, isValidCpf } from "@/lib/cpf";
@@ -318,27 +318,23 @@ interface ResolvedShipping {
   value: number;
 }
 
-// Frete fixo por quantidade de itens — nunca confia no valor mostrado na
-// tela, sempre recalcula a partir da configuração real (store_settings_public,
+// Frete fixo por faixa de quantidade — nunca confia no valor mostrado na
+// tela, sempre recalcula a partir das faixas reais (shipping_tiers,
 // editável em Admin > Configurações > Frete) e da quantidade real do pedido.
 async function resolveShipping(
   service: ReturnType<typeof createServiceClient>,
   totalQuantity: number
 ): Promise<{ shipping: ResolvedShipping }> {
   const { data } = await service
-    .from("store_settings_public")
-    .select("shipping_flat_threshold_qty, shipping_flat_price_standard, shipping_flat_price_above")
-    .single();
+    .from("shipping_tiers")
+    .select("min_qty, max_qty, price")
+    .order("min_qty", { ascending: true });
 
-  const settings = data
-    ? {
-        threshold_qty: data.shipping_flat_threshold_qty,
-        price_standard: Number(data.shipping_flat_price_standard),
-        price_above: Number(data.shipping_flat_price_above),
-      }
-    : DEFAULT_FLAT_SHIPPING_SETTINGS;
+  const tiers = data && data.length > 0
+    ? data.map((t) => ({ min_qty: t.min_qty, max_qty: t.max_qty, price: Number(t.price) }))
+    : DEFAULT_SHIPPING_TIERS;
 
-  const option = computeFlatShipping(totalQuantity, settings);
+  const option = computeFlatShipping(totalQuantity, tiers);
 
   return { shipping: { value: Number(option.price.toFixed(2)) } };
 }

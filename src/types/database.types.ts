@@ -810,6 +810,28 @@ export type Database = {
       };
 
       // -----------------------------------------------------------------------
+      shipping_tiers: {
+        Row: {
+          id:         string;
+          min_qty:    number;
+          max_qty:    number | null;
+          price:      number;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?:         string;
+          min_qty:     number;
+          max_qty?:    number | null;
+          price:       number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["shipping_tiers"]["Insert"]>;
+        Relationships: [];
+      };
+
+      // -----------------------------------------------------------------------
       store_settings_public: {
         Row: {
           lock:             boolean;
@@ -822,9 +844,6 @@ export type Database = {
           address:          string | null;
           meta_title:       string | null;
           meta_description: string | null;
-          shipping_flat_threshold_qty:  number;
-          shipping_flat_price_standard: number;
-          shipping_flat_price_above:    number;
           updated_at:       string;
         };
         Insert: {
@@ -838,9 +857,6 @@ export type Database = {
           address?:          string | null;
           meta_title?:       string | null;
           meta_description?: string | null;
-          shipping_flat_threshold_qty?:  number;
-          shipping_flat_price_standard?: number;
-          shipping_flat_price_above?:    number;
           updated_at?:       string;
         };
         Update: Partial<Database["public"]["Tables"]["store_settings_public"]["Insert"]>;

@@ -2,6 +2,7 @@
 
 import { createServiceClient } from "@/lib/supabase/server";
 import { createClient } from "@/lib/supabase/server";
+import type { ShippingTier } from "@/lib/shipping";
 
 async function assertAdmin() {
   const supabase = await createClient();
@@ -19,56 +20,81 @@ async function assertAdmin() {
   if (!data) throw new Error("Não autorizado");
 }
 
-export interface ShippingSettings {
-  threshold_qty: number;
-  price_standard: number;
-  price_above: number;
-}
-
-export async function getShippingSettings(): Promise<ShippingSettings | { error: string }> {
+export async function getShippingTiers(): Promise<ShippingTier[] | { error: string }> {
   const service = createServiceClient();
   const { data, error } = await service
-    .from("store_settings_public")
-    .select("shipping_flat_threshold_qty, shipping_flat_price_standard, shipping_flat_price_above")
-    .single();
+    .from("shipping_tiers")
+    .select("min_qty, max_qty, price")
+    .order("min_qty", { ascending: true });
 
-  if (error || !data) return { error: "Erro ao carregar configuração de frete." };
+  if (error) return { error: "Erro ao carregar faixas de frete." };
 
-  return {
-    threshold_qty: data.shipping_flat_threshold_qty,
-    price_standard: Number(data.shipping_flat_price_standard),
-    price_above: Number(data.shipping_flat_price_above),
-  };
+  return (data ?? []).map((t) => ({
+    min_qty: t.min_qty,
+    max_qty: t.max_qty,
+    price: Number(t.price),
+  }));
 }
 
-export async function updateShippingSettings(
-  settings: ShippingSettings
-): Promise<{ error?: string }> {
+function validateTiers(tiers: ShippingTier[]): string | null {
+  if (tiers.length === 0) return "Adicione ao menos uma faixa de frete.";
+
+  const sorted = [...tiers].sort((a, b) => a.min_qty - b.min_qty);
+
+  for (const t of sorted) {
+    if (!Number.isInteger(t.min_qty) || t.min_qty < 1) {
+      return `Quantidade mínima inválida: ${t.min_qty}.`;
+    }
+    if (t.max_qty !== null && (!Number.isInteger(t.max_qty) || t.max_qty < t.min_qty)) {
+      return `Faixa ${t.min_qty}–${t.max_qty} inválida: o "até" precisa ser maior ou igual ao "de".`;
+    }
+    if (Number.isNaN(t.price) || t.price < 0) {
+      return `Valor de frete inválido na faixa a partir de ${t.min_qty} itens.`;
+    }
+  }
+
+  for (let i = 1; i < sorted.length; i++) {
+    const prev = sorted[i - 1];
+    const curr = sorted[i];
+    if (prev.max_qty === null) {
+      return `A faixa a partir de ${prev.min_qty} itens não tem limite superior — nenhuma faixa depois dela pode ser aplicada.`;
+    }
+    if (curr.min_qty <= prev.max_qty) {
+      return `Faixas sobrepostas: ${prev.min_qty}–${prev.max_qty} e ${curr.min_qty}–${curr.max_qty ?? "∞"}.`;
+    }
+  }
+
+  return null;
+}
+
+export async function updateShippingTiers(tiers: ShippingTier[]): Promise<{ error?: string }> {
   try {
     await assertAdmin();
   } catch {
     return { error: "Não autorizado." };
   }
 
-  if (!Number.isInteger(settings.threshold_qty) || settings.threshold_qty < 1) {
-    return { error: "Quantidade limite precisa ser um número inteiro maior que zero." };
-  }
-  if (settings.price_standard < 0 || settings.price_above < 0) {
-    return { error: "Os valores de frete não podem ser negativos." };
-  }
+  const validationError = validateTiers(tiers);
+  if (validationError) return { error: validationError };
 
   const service = createServiceClient();
-  const { error } = await service
-    .from("store_settings_public")
-    .update({
-      shipping_flat_threshold_qty: settings.threshold_qty,
-      shipping_flat_price_standard: settings.price_standard,
-      shipping_flat_price_above: settings.price_above,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("lock", true);
 
-  if (error) return { error: error.message };
+  // Substitui tudo — mais simples e seguro que tentar casar id-a-id quando
+  // o admin pode adicionar/remover faixas livremente na mesma edição.
+  const { error: deleteError } = await service
+    .from("shipping_tiers")
+    .delete()
+    .gte("min_qty", 0);
+  if (deleteError) return { error: deleteError.message };
+
+  const { error: insertError } = await service.from("shipping_tiers").insert(
+    tiers.map((t) => ({
+      min_qty: t.min_qty,
+      max_qty: t.max_qty,
+      price: t.price,
+    }))
+  );
+  if (insertError) return { error: insertError.message };
 
   return {};
 }

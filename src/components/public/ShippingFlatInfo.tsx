@@ -3,30 +3,26 @@
 import React, { useEffect, useState } from "react";
 import { Truck } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
-import { computeFlatShipping, DEFAULT_FLAT_SHIPPING_SETTINGS, type FlatShippingSettings } from "@/lib/shipping";
+import { computeFlatShipping, DEFAULT_SHIPPING_TIERS, type ShippingTier } from "@/lib/shipping";
 import { formatCurrency } from "@/lib/formatters";
 import { useCartStore } from "@/store/cart-store";
 
-// Frete fixo por quantidade — nada pra calcular, nada pra escolher. Só busca
-// os valores configurados (Admin > Configurações > Frete) e aplica sozinho
-// assim que o carrinho tem itens.
+// Frete fixo por faixa de quantidade — nada pra calcular, nada pra escolher.
+// Busca as faixas configuradas (Admin > Configurações > Frete) e aplica
+// sozinho assim que o carrinho tem itens.
 export const ShippingFlatInfo = () => {
   const { items, shipping_option, setShipping } = useCartStore();
-  const [settings, setSettings] = useState<FlatShippingSettings>(DEFAULT_FLAT_SHIPPING_SETTINGS);
+  const [tiers, setTiers] = useState<ShippingTier[]>(DEFAULT_SHIPPING_TIERS);
 
   useEffect(() => {
     let active = true;
     createClient()
-      .from("store_settings_public")
-      .select("shipping_flat_threshold_qty, shipping_flat_price_standard, shipping_flat_price_above")
-      .single()
+      .from("shipping_tiers")
+      .select("min_qty, max_qty, price")
+      .order("min_qty", { ascending: true })
       .then(({ data }) => {
-        if (!active || !data) return;
-        setSettings({
-          threshold_qty: data.shipping_flat_threshold_qty,
-          price_standard: Number(data.shipping_flat_price_standard),
-          price_above: Number(data.shipping_flat_price_above),
-        });
+        if (!active || !data || data.length === 0) return;
+        setTiers(data.map((t) => ({ min_qty: t.min_qty, max_qty: t.max_qty, price: Number(t.price) })));
       });
     return () => {
       active = false;
@@ -37,12 +33,12 @@ export const ShippingFlatInfo = () => {
 
   useEffect(() => {
     if (itemCount === 0) return;
-    const option = computeFlatShipping(itemCount, settings);
+    const option = computeFlatShipping(itemCount, tiers);
     if (shipping_option?.code === option.code && shipping_option?.price === option.price) return;
     setShipping(option);
     // shipping_option/setShipping vêm do zustand — não precisam entrar nas deps
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [itemCount, settings]);
+  }, [itemCount, tiers]);
 
   return (
     <div className="space-y-2">
