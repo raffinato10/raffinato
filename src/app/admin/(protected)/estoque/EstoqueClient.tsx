@@ -6,36 +6,56 @@ import Link from "next/link";
 import { Save, PackageX, ExternalLink } from "lucide-react";
 import { Button } from "@/components/common/Button";
 import { SearchInput } from "@/components/common/SearchInput";
+import { Select } from "@/components/common/Select";
 import { routes } from "@/lib/routes";
 import { updateStockLevels } from "@/lib/actions/stock";
-import type { AdminProduct } from "@/lib/db/admin";
+import type { AdminProduct, CategoryTreeOption } from "@/lib/db/admin";
 
 interface Props {
   initialProducts: AdminProduct[];
+  categoryTree: CategoryTreeOption[];
 }
 
 // Uma linha por produto: se tem cores, cada cor vira uma sub-linha com um
 // input por tamanho (product_variant_sizes.stock); senão, um único input
 // de estoque flat (products.stock). O TOTAL é sempre calculado, nunca
 // editado diretamente — muda sozinho conforme os inputs abaixo dele.
-export function EstoqueClient({ initialProducts }: Props) {
+export function EstoqueClient({ initialProducts, categoryTree }: Props) {
   const [products, setProducts] = useState(initialProducts);
   const [search, setSearch] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState("");
   const [sizeEdits, setSizeEdits] = useState<Record<string, string>>({});
   const [flatEdits, setFlatEdits] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
 
+  // Cada departamento (Masculino, Feminino...) filtra por ele mesmo + todas
+  // as suas subcategorias — produto sempre tem category_id de uma folha.
+  const categoryOptions = [
+    { value: "", label: "Todas as categorias" },
+    ...categoryTree.map((dept) => ({ value: dept.value, label: dept.label })),
+  ];
+  const departmentCategoryIds = useMemo(() => {
+    const map = new Map<string, Set<string>>();
+    for (const dept of categoryTree) {
+      map.set(dept.value, new Set([dept.value, ...dept.children.map((c) => c.value)]));
+    }
+    return map;
+  }, [categoryTree]);
+
   const filtered = useMemo(
     () =>
-      products.filter(
-        (p) =>
+      products.filter((p) => {
+        const matchSearch =
           !search ||
           p.name.toLowerCase().includes(search.toLowerCase()) ||
-          p.sku.toLowerCase().includes(search.toLowerCase())
-      ),
-    [products, search]
+          p.sku.toLowerCase().includes(search.toLowerCase());
+        const matchCat =
+          !categoryFilter || departmentCategoryIds.get(categoryFilter)?.has(p.category_id);
+        return matchSearch && matchCat;
+      }),
+    [products, search, categoryFilter, departmentCategoryIds]
   );
 
   const dirtyCount = Object.keys(sizeEdits).length + Object.keys(flatEdits).length;
@@ -134,12 +154,17 @@ export function EstoqueClient({ initialProducts }: Props) {
         </div>
       )}
 
-      <SearchInput
-        value={search}
-        onChange={setSearch}
-        placeholder="Buscar por nome ou SKU..."
-        className="max-w-md"
-      />
+      <div className="flex flex-col sm:flex-row gap-3">
+        <SearchInput
+          value={search}
+          onChange={setSearch}
+          placeholder="Buscar por nome ou SKU..."
+          className="flex-1 max-w-md"
+        />
+        <div className="w-full sm:w-52">
+          <Select value={categoryFilter} onChange={setCategoryFilter} options={categoryOptions} />
+        </div>
+      </div>
 
       <div className="space-y-3">
         {filtered.map((product) => {
